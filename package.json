@@ -1,0 +1,25 @@
+{
+  "name": "your-place",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Your Place — turn any address into a 3D miniature of the surrounding city on real terrain.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "npm run build && node e2e/smoke.mjs"
+  },
+  "dependencies": {
+    "earcut": "3.2.4",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.187.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,269 @@
+/**
+ * End-to-end smoke test: builds nothing itself — run `npm run e2e` (build + this).
+ *
+ * Serves dist/, drives the app in headless Chromium, and saves screenshots to e2e/out/.
+ * Overpass and the geocoders are answered from a deterministic synthetic fixture;
+ * terrain tiles are real (downloaded once with curl into e2e/out/tiles/).
+ * Fails on any console error, page error, or unmet expectation.
+ */
+
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
+import { dirname, extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { synthesize } from './fixtures/synthetic-city.mjs';
+
+const require = createRequire(import.meta.url);
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch {
+  console.error('Playwright is not installed. Install it with `npm i -D playwright && npx playwright install chromium`.');
+  process.exit(2);
+}
+
+const here = dirname(fileURLToPath(import.meta.url));
+const dist = join(here, '..', 'dist');
+const out = join(here, 'out');
+const tiles = join(out, 'tiles');
+mkdirSync(tiles, { recursive: true });
+if (!existsSync(join(dist, 'index.html'))) {
+  console.error('dist/ is missing — run `npm run build` first (or `npm run e2e`).');
+  process.exit(2);
+}
+
+// ------------------------------------------------------------------ static server
+
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.json': 'application/json' };
+const server = createServer((req, res) => {
+  const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
+  let file = join(dist, path);
+  if (!file.startsWith(dist)) return res.writeHead(403).end();
+  if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
+  if (!existsSync(file)) return res.writeHead(404).end('not found');
+  res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
+  res.end(readFileSync(file));
+});
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
+const base = `http://127.0.0.1:${server.address().port}/`;
+
+// ------------------------------------------------------------------ network fixtures
+
+const PLACE = { lat: 48.7765, lon: 9.1772, name: 'Stuttgart', city: 'Stuttgart', state: 'Baden-Württemberg', country: 'Germany' };
+const photon = {
+  type: 'FeatureCollection',
+  features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [PLACE.lon, PLACE.lat] }, properties: { name: PLACE.name, state: PLACE.state, country: PLACE.country, osm_value: 'city' } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [9.18, 48.78] }, properties: { name: 'Stuttgart Hauptbahnhof', city: 'Stuttgart', country: 'Germany' } },
+  ],
+};
+const reverseFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [PLACE.lon, PLACE.lat] }, properties: { district: 'Mitte', city: 'Stuttgart', country: 'Germany' } }] };
+
+let overpassMode = 'ok';
+const counters = { overpass: 0, tiles: 0 };
+
+async function routeAll(context) {
+  await context.route(/overpass|maps\.mail\.ru/, async (route) => {
+    counters.overpass++;
+    if (overpassMode === 'fail') return route.fulfill({ status: 504, body: 'Gateway Timeout' });
+    const body = new URLSearchParams(route.request().postData() ?? '').get('data') ?? '';
+    await new Promise((r) => setTimeout(r, 300)); // a little latency, like the real thing
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(synthesize(body)) });
+  });
+  await context.route(/photon\.komoot\.io\/reverse/, (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(reverseFixture) }));
+  await context.route(/photon\.komoot\.io\/api/, (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(photon) }));
+  await context.route(/nominatim\.openstreetmap\.org/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify([{ lat: String(PLACE.lat), lon: String(PLACE.lon), name: 'Stuttgart', display_name: 'Stuttgart, Baden-Württemberg, Germany' }]) }),
+  );
+  await context.route(/elevation-tiles-prod\/terrarium\/(\d+)\/(\d+)\/(\d+)\.png/, async (route) => {
+    counters.tiles++;
+    const m = /terrarium\/(\d+)\/(\d+)\/(\d+)\.png/.exec(route.request().url());
+    const file = join(tiles, `${m[1]}-${m[2]}-${m[3]}.png`);
+    if (!existsSync(file)) {
+      try {
+        execFileSync('curl', ['-sS', '-f', '-m', '30', '-o', file, route.request().url()]);
+      } catch {
+        return route.fulfill({ status: 502, body: 'tile download failed' });
+      }
+    }
+    route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: readFileSync(file) });
+  });
+}
+
+// ------------------------------------------------------------------ helpers
+
+const failures = [];
+const expect = (cond, msg) => {
+  if (!cond) failures.push(msg);
+  console.log(`${cond ? '✓' : '✗'} ${msg}`);
+};
+
+function watchConsole(page, label) {
+  page.on('console', (m) => {
+    if (m.type() === 'error') failures.push(`[${label}] console error: ${m.text()}`);
+    if (m.type() === 'warning' && !/GPU stall|ReadPixels|swiftshader/i.test(m.text())) console.log(`[${label}] warning: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => failures.push(`[${label}] page error: ${e.message}`));
+}
+
+async function waitStage(page, stages, timeout = 180000) {
+  await page.waitForFunction((s) => s.includes(window.__yourPlace?.stage), stages, { timeout, polling: 250 });
+  return page.evaluate(() => ({ stage: window.__yourPlace.stage, timings: window.__yourPlace.timings, stats: window.__yourPlace.stats() }));
+}
+
+const shot = (page, name) => page.screenshot({ path: join(out, `${name}.png`) });
+const settle = (page, ms = 600) => page.waitForTimeout(ms);
+
+// ------------------------------------------------------------------ run
+
+const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
+try {
+  // ---------------- desktop
+  const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, acceptDownloads: true });
+  await routeAll(desktop);
+  const page = await desktop.newPage();
+  watchConsole(page, 'desktop');
+  await page.goto(base);
+  await page.waitForSelector('#welcome', { state: 'visible' });
+  expect((await page.locator('.preset').count()) === 6, 'landing shows 6 preset places');
+  await shot(page, '01-landing-desktop');
+
+  await page.fill('#search-input', 'Stuttgart');
+  await page.waitForSelector('#suggestions li[role="option"]', { timeout: 5000 });
+  expect((await page.locator('#suggestions li[role="option"]').count()) === 2, 'type-ahead shows suggestions');
+  await page.keyboard.press('ArrowDown');
+  expect((await page.getAttribute('#search-input', 'aria-activedescendant')) === 'sugg-0', 'arrow keys move through suggestions');
+  await page.keyboard.press('Enter');
+  const t = await waitStage(page, ['ready', 'error']);
+  console.log('timings (ms, SwiftShader software GL):', JSON.stringify(Object.fromEntries(Object.entries(t.timings).map(([k, v]) => [k, Math.round(v)]))));
+  console.log('stats:', JSON.stringify(t.stats));
+  expect(t.stage === 'ready', 'model reaches ready state');
+  expect(t.stats.buildings > 1000, `buildings are extruded (${t.stats.buildings})`);
+  expect(t.stats.maxElev - t.stats.minElev > 20, `terrain has relief (${Math.round(t.stats.minElev)}–${Math.round(t.stats.maxElev)} m)`);
+  expect(t.stats.estimatedShare > 0 && t.stats.estimatedShare < 1, 'some heights estimated, some from tags');
+  const hash = await page.evaluate(() => location.hash);
+  expect(/lat=48\.7765/.test(hash) && /cam=/.test(hash), 'URL hash holds coordinates and camera');
+  expect(!/stuttgart/i.test(hash), 'URL hash holds no address text');
+  expect(/Stuttgart/.test(await page.textContent('#place-title')), 'sheet shows the place name');
+  expect(/buildings/.test(await page.textContent('#describe')), 'text description lists buildings');
+  await settle(page, 2200);
+  await shot(page, '02-model-desktop');
+
+  // controls
+  await page.click('#contour-switch');
+  await page.$eval('#ex-range', (el) => {
+    el.value = '3';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle(page, 900);
+  expect((await page.textContent('#ex-out')) === '×3.0', 'exaggeration slider updates its readout');
+  await shot(page, '03-contours-exaggerated');
+  await page.click('#style-group [data-value="ramp"]');
+  expect(await page.isVisible('#legend'), 'height legend appears with height colours');
+  await page.focus('#scene');
+  for (let k = 0; k < 7; k++) await page.keyboard.press('ArrowDown');
+  for (let k = 0; k < 3; k++) await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('+');
+  await settle(page, 1500);
+  const cam = await page.evaluate(() => window.__yourPlace.camera());
+  await shot(page, '04-height-colours-tilted');
+  await page.click('[data-layer="roads"]');
+  await settle(page, 500);
+  expect((await page.getAttribute('[data-layer="roads"]', 'aria-pressed')) === 'false', 'road layer toggles off');
+  await page.click('[data-layer="roads"]');
+
+  // compass reset
+  await page.click('#compass-btn');
+  // software GL renders slowly; wait for the animation's last frame rather than a fixed delay
+  await page.waitForFunction(() => Math.abs(window.__yourPlace.camera()?.azimuth ?? 99) < 1, null, { timeout: 15000 }).catch(() => undefined);
+  const az = await page.evaluate(() => window.__yourPlace.camera()?.azimuth ?? 0);
+  expect(Math.abs(az) < 1, `compass resets to north (azimuth ${az?.toFixed?.(1)})`);
+  expect(cam && cam.tilt > 40, `keyboard tilts the camera (tilt ${cam?.tilt?.toFixed?.(1)}°)`);
+
+  // share + poster
+  await page.click('#share-btn');
+  await page.waitForSelector('#share-dialog[open]');
+  const shareUrl = await page.inputValue('#share-url');
+  expect(shareUrl.includes('#lat='), 'share dialog shows the link');
+  await shot(page, '05-share-dialog');
+  const [download] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#poster-btn')]);
+  const posterPath = join(out, '06-poster.png');
+  await download.saveAs(posterPath);
+  const posterSize = statSync(posterPath).size;
+  expect(posterSize > 200000, `poster PNG downloaded (${download.suggestedFilename()}, ${Math.round(posterSize / 1024)} KB)`);
+
+  // reload from the link: same view
+  const p2 = await desktop.newPage();
+  watchConsole(p2, 'reload');
+  await p2.goto(base + new URL(shareUrl).hash);
+  const t2 = await waitStage(p2, ['ready', 'error']);
+  const s2 = await p2.evaluate(() => window.__yourPlace.state());
+  expect(t2.stage === 'ready', 'shared link rebuilds the model');
+  expect(s2.contours === true && s2.style === 'ramp' && Math.abs(s2.exaggeration - 3) < 1e-6, 'shared link restores settings');
+  expect(/Mitte|Stuttgart/.test(await p2.textContent('#place-title')), 'shared link resolves a neighbourhood name');
+  await p2.close();
+
+  // failure path: Overpass down → terrain still shows, retry offered
+  overpassMode = 'fail';
+  const p3 = await desktop.newPage();
+  p3.on('pageerror', (e) => failures.push(`[failure] page error: ${e.message}`));
+  await p3.goto(`${base}#lat=48.7765&lon=9.1772&km=1&ex=1.5`);
+  const t3 = await waitStage(p3, ['error', 'ready']);
+  expect(t3.stage === 'error', 'Overpass outage is reported');
+  expect(await p3.isVisible('#status .retry'), 'a Retry button is offered');
+  await settle(p3, 1500);
+  await shot(p3, '07-overpass-down');
+  overpassMode = 'ok';
+  await p3.click('#status .retry');
+  const t3b = await waitStage(p3, ['ready'], 180000);
+  expect(t3b.stage === 'ready', 'Retry recovers once Overpass answers');
+  await p3.close();
+  await desktop.close();
+
+  // ---------------- phone
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await routeAll(phone);
+  const mp = await phone.newPage();
+  watchConsole(mp, 'phone');
+  await mp.goto(base);
+  await shot(mp, '08-landing-phone');
+  await mp.click('.preset >> text=Heidelberg');
+  const t4 = await waitStage(mp, ['ready', 'error']);
+  expect(t4.stage === 'ready', 'phone: preset builds');
+  const overflow = await mp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(!overflow, 'phone: no horizontal overflow');
+  await settle(mp, 2000);
+  await shot(mp, '09-model-phone');
+  await mp.click('#sheet-toggle');
+  await settle(mp, 400);
+  await shot(mp, '10-sheet-phone');
+  await phone.close();
+
+  // ---------------- dark mode, reduced motion
+  const dark = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark', reducedMotion: 'reduce' });
+  await routeAll(dark);
+  const dp = await dark.newPage();
+  watchConsole(dp, 'dark');
+  await dp.goto(`${base}#lat=38.7139&lon=-9.1365&km=2&ex=2`);
+  const t5 = await waitStage(dp, ['ready', 'error']);
+  expect(t5.stage === 'ready', 'dark mode: model builds');
+  expect(t5.stats.seaShare > 0.03 && t5.stats.seaShare < 0.2, `coastline fills the sea (${(t5.stats.seaShare * 100).toFixed(1)}% of the square)`);
+  expect(t5.stats.minElev > -5, `no sea-floor pits left (min ${t5.stats.minElev.toFixed(1)} m)`);
+  await settle(dp, 2000);
+  await shot(dp, '11-dark-lisbon');
+  await dark.close();
+} catch (err) {
+  failures.push(`exception: ${err.stack ?? err}`);
+} finally {
+  await browser.close();
+  server.close();
+}
+
+writeFileSync(join(out, 'counters.json'), JSON.stringify(counters));
+if (failures.length) {
+  console.error(`\n${failures.length} failure(s):\n- ${failures.join('\n- ')}`);
+  process.exit(1);
+}
+console.log(`\nAll e2e checks passed. Screenshots in ${out}`);

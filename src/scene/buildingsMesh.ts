@@ -1,0 +1,208 @@
+/**
+ * Extruded buildings, merged into one mesh per tile to keep draw calls low (spec).
+ * Each building stands on the terrain height at its lowest footprint corner.
+ *
+ * Vertical exaggeration applies to the terrain only: a vertex's scene y is
+ *   y = (groundElevation - referenceElevation) * exaggeration + heightAboveGround
+ * so we keep both terms per vertex and re-evaluate y when the slider moves
+ * (or when the reference changes because the sea was flattened).
+ */
+
+import earcut from 'earcut';
+import { BufferAttribute, BufferGeometry, Color } from 'three';
+import type { Polygon } from '../geo/polygon';
+
+export interface BuildingSpec {
+  poly: Polygon;
+  height: number;
+  minHeight: number;
+  estimated: boolean;
+}
+
+export interface BuildingsBuild {
+  geometry: BufferGeometry;
+  /** per vertex: ground elevation of its building (m above sea level) */
+  ground: Float32Array;
+  /** per vertex: height above the building's ground (m); also the `aHag` attribute */
+  hag: Float32Array;
+  /** per vertex: total height of the building it belongs to (m), for the colour ramp */
+  buildingHeight: Float32Array;
+  /** per building: ground elevation (m above sea level) */
+  buildingGround: Float32Array;
+  count: number;
+  estimatedCount: number;
+  maxHeight: number;
+}
+
+export function buildBuildings(specs: BuildingSpec[], groundElevation: (poly: Polygon) => number, refElev: number, ex: number): BuildingsBuild {
+  // pass 1: triangulate roofs and count
+  const tris: number[][] = [];
+  let vCount = 0;
+  let iCount = 0;
+  for (const s of specs) {
+    const rings = [s.poly.outer, ...s.poly.holes];
+    const flat: number[] = [];
+    const holeIdx: number[] = [];
+    let r = 0;
+    for (const ring of rings) {
+      if (flat.length) holeIdx.push(flat.length / 2);
+      for (const [x, y] of ring) flat.push(x, y);
+      r += ring.length;
+    }
+    const t = earcut(flat, holeIdx.length ? holeIdx : undefined, 2);
+    tris.push(t);
+    const under = s.minHeight > 0.5;
+    vCount += r * 4 + r * (under ? 2 : 1);
+    iCount += r * 6 + t.length * (under ? 2 : 1);
+  }
+
+  const pos = new Float32Array(vCount * 3);
+  const nrm = new Float32Array(vCount * 3);
+  const ground = new Float32Array(vCount);
+  const hag = new Float32Array(vCount);
+  const bh = new Float32Array(vCount);
+  const buildingGround = new Float32Array(specs.length);
+  const index = new Uint32Array(iCount);
+  let v = 0;
+  let ii = 0;
+  let maxHeight = 0;
+  let estimatedCount = 0;
+
+  const put = (e: number, n: number, g: number, h: number, height: number, nx: number, ny: number, nz: number) => {
+    pos[v * 3] = e;
+    pos[v * 3 + 1] = (g - refElev) * ex + h;
+    pos[v * 3 + 2] = -n;
+    nrm[v * 3] = nx;
+    nrm[v * 3 + 1] = ny;
+    nrm[v * 3 + 2] = nz;
+    ground[v] = g;
+    hag[v] = h;
+    bh[v] = height;
+    return v++;
+  };
+
+  specs.forEach((s, bi) => {
+    const g = groundElevation(s.poly);
+    buildingGround[bi] = g;
+    const top = s.height;
+    const bottom = s.minHeight > 0.5 ? s.minHeight : -1.5; // sink slightly so no seam shows on flat ground
+    maxHeight = Math.max(maxHeight, top);
+    if (s.estimated) estimatedCount++;
+    const rings = [s.poly.outer, ...s.poly.holes];
+
+    // walls (outer CCW, holes CW → interior on the left, outward normal on the right)
+    for (const ring of rings) {
+      const n = ring.length;
+      for (let k = 0; k < n; k++) {
+        const [ae, an] = ring[k];
+        const [be, bn] = ring[(k + 1) % n];
+        const de = be - ae;
+        const dn = bn - an;
+        const len = Math.hypot(de, dn) || 1;
+        const nx = dn / len;
+        const nz = de / len;
+        const a0 = put(ae, an, g, bottom, top, nx, 0, nz);
+        const b0 = put(be, bn, g, bottom, top, nx, 0, nz);
+        const b1 = put(be, bn, g, top, top, nx, 0, nz);
+        const a1 = put(ae, an, g, top, top, nx, 0, nz);
+        index[ii++] = a0; index[ii++] = b0; index[ii++] = b1;
+        index[ii++] = a0; index[ii++] = b1; index[ii++] = a1;
+      }
+    }
+
+    // roof (and underside for raised parts such as overhangs and bridges)
+    const flatPts = rings.flat();
+    const t = tris[bi];
+    const roofStart = v;
+    for (const [e, n] of flatPts) put(e, n, g, top, top, 0, 1, 0);
+    for (let k = 0; k < t.length; k += 3) {
+      const [p, q, r] = [t[k], t[k + 1], t[k + 2]];
+      const ccw = cross2(flatPts[p], flatPts[q], flatPts[r]) > 0;
+      if (ccw) {
+        index[ii++] = roofStart + p; index[ii++] = roofStart + q; index[ii++] = roofStart + r;
+      } else {
+        index[ii++] = roofStart + p; index[ii++] = roofStart + r; index[ii++] = roofStart + q;
+      }
+    }
+    if (s.minHeight > 0.5) {
+      const underStart = v;
+      for (const [e, n] of flatPts) put(e, n, g, s.minHeight, top, 0, -1, 0);
+      for (let k = 0; k < t.length; k += 3) {
+        const [p, q, r] = [t[k], t[k + 1], t[k + 2]];
+        const ccw = cross2(flatPts[p], flatPts[q], flatPts[r]) > 0;
+        if (ccw) {
+          index[ii++] = underStart + p; index[ii++] = underStart + r; index[ii++] = underStart + q;
+        } else {
+          index[ii++] = underStart + p; index[ii++] = underStart + q; index[ii++] = underStart + r;
+        }
+      }
+    }
+  });
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(pos, 3));
+  geometry.setAttribute('normal', new BufferAttribute(nrm, 3));
+  geometry.setAttribute('aHag', new BufferAttribute(hag, 1));
+  geometry.setAttribute('color', new BufferAttribute(new Float32Array(vCount * 3).fill(1), 3));
+  geometry.setIndex(new BufferAttribute(index, 1));
+  geometry.computeBoundingSphere();
+  return { geometry, ground, hag, buildingHeight: bh, buildingGround, count: specs.length, estimatedCount, maxHeight };
+}
+
+function cross2(a: [number, number], b: [number, number], c: [number, number]): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+export function setBuildingsExaggeration(b: BuildingsBuild, ex: number, refElev: number): void {
+  const pos = b.geometry.getAttribute('position') as BufferAttribute;
+  const arr = pos.array as Float32Array;
+  for (let v = 0; v < b.ground.length; v++) arr[v * 3 + 1] = (b.ground[v] - refElev) * ex + b.hag[v];
+  pos.needsUpdate = true;
+  b.geometry.computeBoundingSphere();
+}
+
+// ---------------------------------------------------------------- colour
+
+/** Height ramp (viridis stops: colour-blind safe, monotonic lightness). */
+export const HEIGHT_RAMP: Array<[number, string]> = [
+  [0, '#fde725'],
+  [10, '#7ad151'],
+  [20, '#22a884'],
+  [40, '#2a788e'],
+  [80, '#414487'],
+  [160, '#440154'],
+];
+
+export const WHITE_BUILDING = '#f7f5f0';
+
+const rampColors = HEIGHT_RAMP.map(([h, c]) => [h, new Color(c)] as const);
+
+export function rampColor(h: number, out = new Color()): Color {
+  if (h <= rampColors[0][0]) return out.copy(rampColors[0][1]);
+  for (let k = 1; k < rampColors.length; k++) {
+    const [h1, c1] = rampColors[k];
+    if (h <= h1) {
+      const [h0, c0] = rampColors[k - 1];
+      return out.copy(c0).lerp(c1, (h - h0) / (h1 - h0));
+    }
+  }
+  return out.copy(rampColors[rampColors.length - 1][1]);
+}
+
+export function applyBuildingStyle(b: BuildingsBuild, style: 'white' | 'ramp'): void {
+  const col = b.geometry.getAttribute('color') as BufferAttribute;
+  const arr = col.array as Float32Array;
+  const c = new Color();
+  const white = new Color(WHITE_BUILDING);
+  let lastH = -1;
+  for (let v = 0; v < b.buildingHeight.length; v++) {
+    const h = b.buildingHeight[v];
+    if (style === 'white') c.copy(white);
+    else if (h !== lastH) rampColor(h, c);
+    lastH = style === 'white' ? -1 : h;
+    arr[v * 3] = c.r;
+    arr[v * 3 + 1] = c.g;
+    arr[v * 3 + 2] = c.b;
+  }
+  col.needsUpdate = true;
+}

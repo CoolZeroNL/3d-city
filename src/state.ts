@@ -1,0 +1,92 @@
+/**
+ * View state and its URL form. Shared links carry coordinates and view
+ * settings only — never the address the user typed (spec: privacy).
+ */
+
+import { round, type LngLat } from './geo/projection';
+
+export type BuildingStyle = 'white' | 'ramp';
+export const AREA_SIZES = [1000, 2000, 4000] as const;
+export type AreaSize = (typeof AREA_SIZES)[number];
+
+export interface Layers {
+  roads: boolean;
+  water: boolean;
+  green: boolean;
+}
+
+/** Orbit camera: angles in degrees, distance in metres, target offset in metres (E, N). */
+export interface CameraState {
+  azimuth: number;
+  tilt: number;
+  distance: number;
+  targetE: number;
+  targetN: number;
+}
+
+export interface ViewState {
+  center: LngLat | null;
+  size: AreaSize;
+  exaggeration: number;
+  contours: boolean;
+  style: BuildingStyle;
+  layers: Layers;
+  camera: CameraState | null;
+}
+
+export const DEFAULT_STATE: ViewState = {
+  center: null,
+  size: 2000,
+  exaggeration: 1.5,
+  contours: false,
+  style: 'white',
+  layers: { roads: true, water: true, green: true },
+  camera: null,
+};
+
+export const EXAGGERATION_MIN = 1;
+export const EXAGGERATION_MAX = 5;
+
+export function encodeState(s: ViewState): string {
+  if (!s.center) return '';
+  const p = new URLSearchParams();
+  p.set('lat', round(s.center.lat, 5).toFixed(5));
+  p.set('lon', round(s.center.lon, 5).toFixed(5));
+  p.set('km', String(s.size / 1000));
+  p.set('ex', round(s.exaggeration, 1).toString());
+  if (s.contours) p.set('ct', '1');
+  if (s.style !== 'white') p.set('st', s.style);
+  const ly = `${s.layers.roads ? 'r' : ''}${s.layers.water ? 'w' : ''}${s.layers.green ? 'g' : ''}`;
+  if (ly !== 'rwg') p.set('ly', ly || '-');
+  if (s.camera) {
+    const c = s.camera;
+    p.set('cam', [round(c.azimuth, 1), round(c.tilt, 1), Math.round(c.distance), Math.round(c.targetE), Math.round(c.targetN)].join(','));
+  }
+  return p.toString();
+}
+
+export function decodeState(raw: string, base: ViewState = DEFAULT_STATE): ViewState {
+  const p = new URLSearchParams(raw.replace(/^[#?]/, ''));
+  const s: ViewState = { ...base, layers: { ...base.layers }, camera: null };
+  const lat = Number(p.get('lat'));
+  const lon = Number(p.get('lon'));
+  if (p.has('lat') && p.has('lon') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180) {
+    s.center = { lat, lon };
+  } else {
+    return { ...base, center: null };
+  }
+  const km = Number(p.get('km'));
+  const size = (km * 1000) as AreaSize;
+  if (AREA_SIZES.includes(size)) s.size = size;
+  const ex = Number(p.get('ex'));
+  if (p.has('ex') && Number.isFinite(ex)) s.exaggeration = Math.min(EXAGGERATION_MAX, Math.max(EXAGGERATION_MIN, ex));
+  s.contours = p.get('ct') === '1';
+  s.style = p.get('st') === 'ramp' ? 'ramp' : 'white';
+  const ly = p.get('ly');
+  if (ly != null) s.layers = { roads: ly.includes('r'), water: ly.includes('w'), green: ly.includes('g') };
+  const cam = p.get('cam')?.split(',').map(Number);
+  if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
+    s.camera = { azimuth: cam[0], tilt: cam[1], distance: cam[2], targetE: cam[3], targetN: cam[4] };
+  }
+  return s;
+}

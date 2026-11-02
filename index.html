@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Your Place</title>
+    <meta name="description" content="Turn any address into a 3D miniature of the surrounding city, with the real terrain underneath." />
+    <meta name="theme-color" content="#ebe7df" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+  </head>
+  <body>
+    <div class="app" id="app" data-mode="landing">
+      <div class="stage" id="stage">
+        <canvas
+          id="scene"
+          tabindex="0"
+          role="img"
+          aria-roledescription="3D model"
+          aria-label="3D model of the selected area. Arrow keys orbit and tilt, plus and minus zoom, N faces north, 0 resets the view."
+        ></canvas>
+      </div>
+
+      <header class="topbar">
+        <form class="search" id="search-form" role="search" autocomplete="off">
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+          <input
+            id="search-input"
+            type="search"
+            inputmode="search"
+            enterkeyhint="search"
+            placeholder="Search an address or place"
+            aria-label="Search an address or place"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="suggestions"
+          />
+          <button type="button" class="icon-btn" id="locate-btn" aria-label="Use my location" title="Use my location">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="7.5" /><path d="M12 1.8v3M12 19.2v3M1.8 12h3M19.2 12h3" /></svg>
+          </button>
+          <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions" hidden></ul>
+        </form>
+        <div class="status" id="status" role="status" aria-live="polite" hidden></div>
+      </header>
+
+      <section class="welcome" id="welcome" aria-labelledby="welcome-title">
+        <p class="eyebrow">Your Place</p>
+        <h1 id="welcome-title">Your neighbourhood as a 3D model</h1>
+        <p class="lede">Search an address to build a miniature of the area around it: the real terrain underneath, every building standing on top.</p>
+        <p class="presets-label">Or start with a place with interesting terrain</p>
+        <div class="presets" id="presets"></div>
+      </section>
+
+      <div class="fabs" id="fabs">
+        <button type="button" class="fab" id="compass-btn" aria-label="Face north" title="Face north (N)">
+          <svg viewBox="0 0 24 24" aria-hidden="true" id="compass-needle"><path class="needle-n" d="M12 3.5 15 12H9z" /><path class="needle-s" d="M12 20.5 9 12h6z" /></svg>
+        </button>
+        <button type="button" class="fab" id="reset-btn" aria-label="Reset view" title="Reset view (0)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5M4 15v5h5M20 9V4h-5" /></svg>
+        </button>
+        <button type="button" class="fab" id="share-btn" aria-label="Share or export" title="Share or export">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" /><path d="M5 12v7.5h14V12" /></svg>
+        </button>
+      </div>
+
+      <aside class="sheet" id="sheet" aria-label="Model settings">
+        <button type="button" class="sheet-head" id="sheet-toggle" aria-expanded="false" aria-controls="sheet-body">
+          <span class="sheet-title">
+            <span class="place-title" id="place-title">—</span>
+            <span class="place-meta" id="place-meta"></span>
+          </span>
+          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
+        </button>
+        <div class="sheet-body" id="sheet-body">
+          <div class="control">
+            <div class="control-label">
+              <label for="ex-range">Terrain exaggeration</label>
+              <output id="ex-out" for="ex-range">×1.5</output>
+            </div>
+            <input type="range" id="ex-range" min="1" max="5" step="0.1" value="1.5" />
+          </div>
+
+          <div class="control control-row">
+            <div class="control-label">
+              <span id="contour-label">Contour lines</span>
+              <small id="contour-note">every 10 m</small>
+            </div>
+            <button type="button" class="switch" id="contour-switch" role="switch" aria-checked="false" aria-labelledby="contour-label">
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+
+          <div class="control">
+            <div class="control-label"><span id="style-label">Buildings</span></div>
+            <div class="segmented" role="radiogroup" aria-labelledby="style-label" id="style-group">
+              <button type="button" role="radio" data-value="white" aria-checked="true">White blocks</button>
+              <button type="button" role="radio" data-value="ramp" aria-checked="false">Height colours</button>
+            </div>
+            <div class="legend" id="legend" hidden>
+              <div class="legend-bar" id="legend-bar"></div>
+              <div class="legend-labels" id="legend-labels"></div>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control-label"><span id="size-label">Area</span></div>
+            <div class="segmented" role="radiogroup" aria-labelledby="size-label" id="size-group">
+              <button type="button" role="radio" data-value="1000" aria-checked="false">1 km</button>
+              <button type="button" role="radio" data-value="2000" aria-checked="true">2 km</button>
+              <button type="button" role="radio" data-value="4000" aria-checked="false">4 km</button>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control-label"><span id="layers-label">Map layers</span></div>
+            <div class="chips" role="group" aria-labelledby="layers-label" id="layers-group">
+              <button type="button" class="chip" data-layer="roads" aria-pressed="true"><i class="swatch swatch-roads"></i>Roads</button>
+              <button type="button" class="chip" data-layer="water" aria-pressed="true"><i class="swatch swatch-water"></i>Water</button>
+              <button type="button" class="chip" data-layer="green" aria-pressed="true"><i class="swatch swatch-green"></i>Green</button>
+            </div>
+          </div>
+
+          <div class="about">
+            <p id="describe" class="describe"></p>
+            <p id="estimate-note" class="estimate-note" hidden></p>
+            <p class="attr">Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen, AWS Terrain Tiles.</p>
+          </div>
+        </div>
+      </aside>
+
+      <footer class="attribution">
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ·
+        Terrain: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Mapzen, AWS Terrain Tiles</a>
+      </footer>
+
+      <dialog class="dialog" id="share-dialog" aria-labelledby="share-title">
+        <form method="dialog" class="dialog-inner">
+          <div class="dialog-head">
+            <h2 id="share-title">Share this model</h2>
+            <button class="icon-btn" value="close" aria-label="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+          <p class="dialog-note">The link holds the coordinates and your view — not the address you typed.</p>
+          <div class="link-row">
+            <input id="share-url" type="text" readonly aria-label="Share link" />
+            <button type="button" class="btn" id="copy-btn">Copy link</button>
+          </div>
+          <button type="button" class="btn btn-wide" id="native-share-btn" hidden>Share…</button>
+          <button type="button" class="btn btn-wide btn-primary" id="poster-btn">Download poster (PNG)</button>
+          <p class="dialog-note" id="share-msg" role="status" aria-live="polite"></p>
+        </form>
+      </dialog>
+
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+      <div class="unsupported" id="unsupported" hidden>
+        <h1>This browser can’t show the 3D model</h1>
+        <p>Your Place needs WebGL 2. Try a current version of Safari, Chrome, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

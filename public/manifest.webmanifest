@@ -1,0 +1,14 @@
+{
+  "name": "Your Place",
+  "short_name": "Your Place",
+  "description": "Turn any address into a 3D miniature of the surrounding city, with the real terrain underneath.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ebe7df",
+  "theme_color": "#ebe7df",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
