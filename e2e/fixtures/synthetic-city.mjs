@@ -35,13 +35,13 @@ function rng(seed) {
   };
 }
 
-/** A spot in open country between villages (the middle of postcode area 38312) and its villages. */
-export const RURAL = { lat: 52.0835, lon: 10.5531 };
-export const DORSTADT = { lat: 52.0967, lon: 10.5719 };
+/** A spot in open country between villages (the middle of postcode area 84999) and its villages. */
+export const RURAL = { lat: 48.4835, lon: 11.7531 };
+export const VILLAGE = { lat: 48.4967, lon: 11.7704 };
 const SETTLEMENTS = [
-  { type: 'node', id: 1, lat: DORSTADT.lat, lon: DORSTADT.lon, tags: { place: 'village', name: 'Dorstadt' } },
-  { type: 'node', id: 2, lat: 52.085, lon: 10.556, tags: { place: 'hamlet', name: 'Gut Nord' } },
-  { type: 'node', id: 3, lat: 52.162, lon: 10.537, tags: { place: 'town', name: 'Wolfenbüttel' } },
+  { type: 'node', id: 1, lat: VILLAGE.lat, lon: VILLAGE.lon, tags: { place: 'village', name: 'Kleinfelde' } },
+  { type: 'node', id: 2, lat: 48.485, lon: 11.756, tags: { place: 'hamlet', name: 'Hof Nord' } },
+  { type: 'node', id: 3, lat: 48.562, lon: 11.737, tags: { place: 'town', name: 'Marktstadt' } },
 ];
 
 export function synthesize(query) {
@@ -163,7 +163,7 @@ export function synthesize(query) {
 /**
  * The same synthetic data as GeoJSON layers in the OpenMapTiles schema, for a
  * fake OpenFreeMap tile server. One "world" per test place, built once:
- * cities around the city presets, a lone village at Dorstadt with fields around it.
+ * cities around the city presets, a lone village at Kleinfelde with fields around it.
  */
 export const WORLD_CENTERS = [
   { lat: 48.7765, lon: 9.1772, sizeM: 5000 }, // Stuttgart
@@ -223,10 +223,10 @@ export function buildWorld() {
     toLayers(synthesize(bboxQuery(w, w.sizeM, 'building')).elements, layers);
     toLayers(synthesize(bboxQuery(w, w.sizeM, 'features')).elements, layers);
   }
-  // Dorstadt: a village of ~600 m radius; open fields between it and the postcode middle (RURAL)
+  // Kleinfelde: a village of ~600 m radius; open fields between it and the postcode middle (RURAL)
   const near = (p, c, m) => Math.hypot((p[0] - c.lon) * 111320 * Math.cos((c.lat * Math.PI) / 180), (p[1] - c.lat) * 111200) < m;
-  toLayers(synthesize(bboxQuery(DORSTADT, 1400, 'building')).elements, layers, (p) => near(p, DORSTADT, 600));
-  layers.transportation.push({ type: 'Feature', properties: { class: 'tertiary' }, geometry: { type: 'LineString', coordinates: [[RURAL.lon - 0.01, RURAL.lat], [DORSTADT.lon, DORSTADT.lat]] } });
+  toLayers(synthesize(bboxQuery(VILLAGE, 1400, 'building')).elements, layers, (p) => near(p, VILLAGE, 600));
+  layers.transportation.push({ type: 'Feature', properties: { class: 'tertiary' }, geometry: { type: 'LineString', coordinates: [[RURAL.lon - 0.01, RURAL.lat], [VILLAGE.lon, VILLAGE.lat]] } });
   for (const s of SETTLEMENTS) layers.place.push({ type: 'Feature', properties: { class: s.tags.place, name: s.tags.name }, geometry: { type: 'Point', coordinates: [s.lon, s.lat] } });
   layers.place.push({ type: 'Feature', properties: { class: 'city', name: 'Stuttgart' }, geometry: { type: 'Point', coordinates: [9.1772, 48.7765] } });
   return Object.fromEntries(Object.entries(layers).map(([k, v]) => [k, { type: 'FeatureCollection', features: v }]));

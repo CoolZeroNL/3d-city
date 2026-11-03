@@ -1,6 +1,6 @@
 /**
  * A dismissible card under the search bar for things the user can act on,
- * e.g. "No buildings here — Dorstadt is 1.8 km north-east [Go to Dorstadt]".
+ * e.g. "No buildings here — Kleinfelde is 1.8 km north-east [Go to Kleinfelde]".
  */
 
 export interface NoticeAction {

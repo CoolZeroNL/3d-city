@@ -155,13 +155,17 @@ describe('3D print (STL)', () => {
 
   it('writes a binary STL that readers recognise', () => {
     const t = buildPrint(grid(3, 100, () => 0), [{ poly: square(0, 0, 10), top: 5 }], opts);
-    const buf = toBinaryStl(t, 'Dorstadt — 1 km');
+    const buf = toBinaryStl(t, 'Kleinfelde — 1 km');
     const dv = new DataView(buf);
     expect(buf.byteLength).toBe(84 + 50 * t.count);
     expect(dv.getUint32(80, true)).toBe(t.count);
     const header = new TextDecoder().decode(new Uint8Array(buf, 0, 80));
     expect(header.startsWith('solid')).toBe(false);
-    expect(header).toContain('Dorstadt');
+    expect(header).toContain('Kleinfelde');
+    expect(header).toContain('(c) OpenStreetMap contributors');
+    // a long place name is shortened, the map data credit is kept
+    const long = new TextDecoder().decode(new Uint8Array(toBinaryStl(t, 'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch, 4 km, 1:20,000, terrain x3.0'), 0, 80));
+    expect(long.endsWith(' | (c) OpenStreetMap contributors')).toBe(true);
     const [nx, ny, nz] = [dv.getFloat32(84, true), dv.getFloat32(88, true), dv.getFloat32(92, true)];
     expect(Math.hypot(nx, ny, nz)).toBeCloseTo(1, 5);
   });

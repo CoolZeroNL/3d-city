@@ -11,10 +11,10 @@ const center = { lat: 52.2647, lon: 10.5236 };
 describe('projection', () => {
   it('round-trips local metres and lon/lat', () => {
     const p = makeProjector(center);
-    const [e, n] = p.toLocal(10.53, 52.27);
+    const [e, n] = p.toLocal(11.53, 48.27);
     const back = p.toLngLat(e, n);
-    expect(back.lon).toBeCloseTo(10.53, 9);
-    expect(back.lat).toBeCloseTo(52.27, 9);
+    expect(back.lon).toBeCloseTo(11.53, 9);
+    expect(back.lat).toBeCloseTo(48.27, 9);
   });
 
   it('uses roughly the right scale at 52°N', () => {
@@ -246,9 +246,9 @@ describe('geocoding helpers', () => {
   });
 
   it('builds readable labels from Photon properties', () => {
-    expect(photonLabel({ street: 'Bohlweg', housenumber: '30', postcode: '38100', city: 'Braunschweig', country: 'Germany' })).toEqual({
-      label: 'Bohlweg 30',
-      detail: '38100 Braunschweig, Germany',
+    expect(photonLabel({ street: 'Marienplatz', housenumber: '8', postcode: '80331', city: 'München', country: 'Germany' })).toEqual({
+      label: 'Marienplatz 8',
+      detail: '80331 München, Germany',
     });
     expect(photonLabel({ name: 'Heidelberg', state: 'Baden-Württemberg', country: 'Germany' }).label).toBe('Heidelberg');
   });

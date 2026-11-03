@@ -5,7 +5,7 @@ import { decodeTile, parseTiles, tileBounds, tilesForSquare, type LoadedTile, ty
 import { makeProjector, type LngLat } from '../src/geo/projection';
 import { signedArea, type Polygon } from '../src/geo/polygon';
 
-const C: LngLat = { lat: 52.0967, lon: 10.5719 };
+const C: LngLat = { lat: 48.4967, lon: 11.7704 };
 const proj = makeProjector(C);
 const ll = (e: number, n: number): [number, number] => {
   const p = proj.toLngLat(e, n);
@@ -89,8 +89,8 @@ describe('vector tile data', () => {
         waterway: fc([feat({ type: 'LineString', coordinates: [ll(-500, 400), ll(500, 420)] }, { class: 'river' })]),
         landcover: fc([feat({ type: 'Polygon', coordinates: box(-400, 200, 100, 100) }, { class: 'wood', subclass: 'forest' })]),
         place: fc([
-          feat({ type: 'Point', coordinates: ll(0, 0) }, { class: 'village', name: 'Dorstadt' }),
-          feat({ type: 'Point', coordinates: ll(1500, 1500) }, { class: 'hamlet', name: 'Gut Nord' }),
+          feat({ type: 'Point', coordinates: ll(0, 0) }, { class: 'village', name: 'Kleinfelde' }),
+          feat({ type: 'Point', coordinates: ll(4000, 4000) }, { class: 'hamlet', name: 'Hof Nord' }),
         ]),
       },
       refs,
@@ -105,7 +105,7 @@ describe('vector tile data', () => {
     expect([...areaKinds].sort()).toEqual(['forest', 'plaza', 'water']);
     expect(d.features.sea?.length).toBeGreaterThan(0);
     const names = d.settlements.map((s) => s.name).sort();
-    expect(names).toEqual(['Dorstadt']); // Gut Nord lies outside these tiles
+    expect(names).toEqual(['Kleinfelde']); // Hof Nord lies outside these tiles
     expect(d.settlements[0].distanceM).toBeLessThan(5);
   });
 });

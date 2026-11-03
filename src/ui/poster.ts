@@ -14,7 +14,7 @@ export interface PosterInfo {
   exaggeration: number;
 }
 
-export const ATTRIBUTION_TEXT = '© OpenStreetMap contributors (ODbL) · Terrain: Mapzen, AWS Terrain Tiles';
+export const ATTRIBUTION_TEXT = '© OpenStreetMap contributors (ODbL) · © OpenMapTiles · OpenFreeMap · Terrain: Mapzen, AWS Terrain Tiles';
 
 export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400): Promise<Blob> {
   const render = viewer.renderStill(width, width);
@@ -69,7 +69,7 @@ export function posterFileName(title: string, sizeM: number): string {
   return exportFileName(title, sizeM, 'png');
 }
 
-/** "your-place-dorstadt-1km.png", "your-place-dorstadt-1km-15cm.stl" */
+/** "your-place-kleinfelde-1km.png", "your-place-kleinfelde-1km-15cm.stl" */
 export function exportFileName(title: string, sizeM: number, suffix: string): string {
   const slug = title
     .normalize('NFKD')
