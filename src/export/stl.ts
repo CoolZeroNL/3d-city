@@ -141,6 +141,8 @@ function addTerrainBlock(t: Triangles, grid: HeightGrid, ex: number, s: number, 
  * Drop repeated points and points on a straight wall (common where a neighbour's
  * corner attaches). The roof triangulation skips such points, so walls keeping
  * them would leave hairline gaps along the roof edge. Same exact test as earcut's.
+ * Also drops hairline spikes (an edge that folds back on itself within ~1°), which
+ * would become back-to-back slivers of wall.
  */
 export function cleanRing(ring: Array<[number, number]>): Array<[number, number]> {
   const r = ring.slice();
@@ -152,8 +154,11 @@ export function cleanRing(ring: Array<[number, number]>): Array<[number, number]
       const q = r[k];
       const n = r[(k + 1) % r.length];
       const same = q[0] === n[0] && q[1] === n[1];
-      const straight = (q[1] - p[1]) * (n[0] - q[0]) - (q[0] - p[0]) * (n[1] - q[1]) === 0;
-      if (same || straight) {
+      const cross = (q[1] - p[1]) * (n[0] - q[0]) - (q[0] - p[0]) * (n[1] - q[1]);
+      const straight = cross === 0;
+      const dot = (q[0] - p[0]) * (n[0] - q[0]) + (q[1] - p[1]) * (n[1] - q[1]);
+      const spike = dot < 0 && Math.abs(cross) < 0.017 * Math.hypot(q[0] - p[0], q[1] - p[1]) * Math.hypot(n[0] - q[0], n[1] - q[1]);
+      if (same || straight || spike) {
         r.splice(k, 1);
         changed = true;
         k--;
@@ -228,7 +233,7 @@ function insetFootprint(fp: Footprint, d: number): Footprint | null {
 }
 
 /** Roof triangles if the footprint is valid (simple rings, fully triangulated), else null. */
-function triangulate(fp: Footprint): { flat: number[]; tris: number[] } | null {
+function triangulate(fp: Footprint, attempt = 0): { fp: Footprint; flat: number[]; tris: number[] } | null {
   const rings = [fp.outer, ...fp.holes];
   if (!rings.every(isSimple)) return null;
   const flat: number[] = [];
@@ -241,7 +246,17 @@ function triangulate(fp: Footprint): { flat: number[]; tris: number[] } | null {
   const tris = earcut(flat, holes, 2);
   // earcut gives up quietly on broken input: check that the triangles cover the area
   if (!tris.length || deviation(flat, holes ?? null, 2, tris) > 1e-6) return null;
-  return { flat, tris };
+  // Joining a courtyard to the outer ring can line points up, and earcut then skips
+  // them; walls keeping a skipped point would leave a hairline gap. Retry without them.
+  const used = new Uint8Array(flat.length / 2);
+  for (const i of tris) used[i] = 1;
+  if (used.every((u) => u === 1)) return { fp, flat, tris };
+  if (attempt >= 3) return null;
+  let k = 0;
+  const keep = (r: P2[]) => r.filter(() => used[k++] === 1);
+  const outer = keep(fp.outer);
+  const next = { outer, holes: fp.holes.map(keep).filter((h) => h.length >= 3) };
+  return outer.length >= 3 ? triangulate(next, attempt + 1) : null;
 }
 
 /** No two non-neighbouring edges of the ring touch or cross. */
@@ -292,13 +307,13 @@ function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s:
   for (const fp of footprints(poly, s, inset)) {
     const done = triangulate(fp);
     if (done) {
-      emitPrism(t, fp, done.flat, done.tris, topZ, bottomZ);
+      emitPrism(t, done.fp, done.flat, done.tris, topZ, bottomZ);
       continue;
     }
     // the inset closed a narrow notch, or earcut gave up: repair once more, else leave it out
     for (const fixed of repair(fp)) {
       const ok = triangulate(fixed);
-      if (ok) emitPrism(t, fixed, ok.flat, ok.tris, topZ, bottomZ);
+      if (ok) emitPrism(t, ok.fp, ok.flat, ok.tris, topZ, bottomZ);
     }
   }
 }

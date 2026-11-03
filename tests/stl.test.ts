@@ -169,6 +169,24 @@ describe('3D print (STL)', () => {
     expect(cleanRing([[0, 0], [1, 0], [2, 0]])).toHaveLength(2); // degenerate: nothing left to build
   });
 
+  it('drops hairline spikes', () => {
+    // a spike out of the top edge that folds back within a fraction of a degree
+    const spiky: Array<[number, number]> = [[0, 0], [10, 0], [10, 10], [5, 10], [5.001, 20], [5.002, 10], [0, 10]];
+    expect(cleanRing(spiky)).toEqual([[0, 0], [10, 0], [10, 10], [0, 10]]);
+  });
+
+  it('stays closed for an Eixample-style block: octagon with an aligned courtyard', () => {
+    const flat = grid(3, 200, () => 0);
+    const oct = (c: number, r: number, k: number): Array<[number, number]> => [
+      [c - r + k, c - r], [c + r - k, c - r], [c + r, c - r + k], [c + r, c + r - k],
+      [c + r - k, c + r], [c - r + k, c + r], [c - r, c + r - k], [c - r, c - r + k],
+    ];
+    // courtyard corners exactly on the lines of the outer walls
+    const block: Polygon = { outer: withOrientation(oct(0, 56, 10), true), holes: [withOrientation(oct(0, 36, 10), false)] };
+    const t = buildPrint(flat, [{ poly: block, top: 20 }], { ...opts, sideMm: 200, shellGapMm: undefined });
+    expect(closedShells(t)).toBe(true);
+  });
+
   it('states the scale', () => {
     expect(printScale(2000, 150)).toBe('1:13,300');
     expect(printScale(1000, 100)).toBe('1:10,000');
