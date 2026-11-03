@@ -49,6 +49,8 @@ const debug = {
   source: '' as '' | 'tiles' | 'overpass',
   pin: () => model?.pinInfo() ?? null,
   pick: (x: number, y: number) => viewer.pick(x, y),
+  /** used by tools/video to drive the camera frame by frame */
+  setCamera: (c: Parameters<Viewer['setCameraState']>[0]) => viewer.setCameraState(c),
 };
 (window as unknown as { __yourPlace: typeof debug }).__yourPlace = debug;
 
