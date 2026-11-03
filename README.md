@@ -86,6 +86,15 @@ Design notes:
   boolean geometry in the browser. Scale is the print width over the square (15 cm for 2 km is
   1:13,300); buildings keep their real height at that scale, the terrain uses the on-screen
   exaggeration, and the base is 3 mm under the lowest point.
+- **Every shell is closed, and no two shells touch.** Map data is messy, so each footprint is
+  cleaned (repeated points, points on straight walls, hairline spikes), checked (simple rings,
+  courtyards clear of the outer wall, a roof triangulation whose boundary is exactly the walls'
+  top edges) and repaired with a polygon union when needed. Buildings cut by tile edges are joined
+  again, and every building is inset by about 0.01 mm so terraced houses and stacked building
+  parts never share a point (slicers close gaps that small). An outline that cannot be repaired is
+  left out, and the dialog says so. Checked with trimesh on live data for Stuttgart 2 and 4 km,
+  Barcelona's Eixample, Berlin courtyards, Hong Kong and a village: 38,692 shells, all watertight
+  and outward-facing; one Barcelona building was left out.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
 ## Controls
