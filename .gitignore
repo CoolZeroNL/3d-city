@@ -1,5 +1,4 @@
 node_modules/
 dist/
 e2e/out/
-# The repo root ignores lockfiles; keep this app's lockfile for reproducible installs.
-!package-lock.json
+.DS_Store
