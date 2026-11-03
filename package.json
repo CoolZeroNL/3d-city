@@ -3,12 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "description": "Your Place — turn any address into a 3D miniature of the surrounding city on real terrain.",
-  "homepage": "https://adam2kg.github.io/3d-city/",
+  "homepage": "https://yourplace3d.github.io/3d-city/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Adam2kg/3d-city.git"
+    "url": "https://github.com/yourplace3d/3d-city.git"
   },
-  "bugs": "https://github.com/Adam2kg/3d-city/issues",
+  "bugs": "https://github.com/yourplace3d/3d-city/issues",
   "keywords": [
     "3d-map",
     "city-model",

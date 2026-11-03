@@ -4,7 +4,7 @@
 every building standing on top. Save a poster or a watertight STL to 3D print it. Free, no account,
 works on your phone.**
 
-**[Open Your Place →](https://adam2kg.github.io/3d-city/)** · [How it works](https://adam2kg.github.io/3d-city/about/) · [Changelog](CHANGELOG.md)
+**[Open Your Place →](https://yourplace3d.github.io/3d-city/)** · [How it works](https://yourplace3d.github.io/3d-city/about/) · [Changelog](CHANGELOG.md)
 
 <p>
   <img src="public/screenshot.jpg" alt="Your Place showing Stuttgart as a 3D model on its valley terrain, with the settings panel open" width="73%" />
@@ -51,7 +51,7 @@ Source: GitHub Actions**. To publish a release, add its section to [CHANGELOG.md
 then run the **Release** workflow from the Actions tab with the version number (or push a tag such
 as `v1.0.1`). It creates the tag and a GitHub release with that version’s notes.
 
-**Own domain.** Point a DNS `CNAME` record (e.g. `3d.example.com`) at `adam2kg.github.io`, enter the
+**Own domain.** Point a DNS `CNAME` record (e.g. `3d.example.com`) at `yourplace3d.github.io`, enter the
 domain under **Settings → Pages → Custom domain**, and change `SITE_URL` in `vite.config.ts` (or set
 the `SITE_URL` environment variable in the build) so canonical links, preview images and the sitemap
 use it.

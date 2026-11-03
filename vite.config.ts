@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 
 /** Where the site is published. Set SITE_URL (or change the default) when it moves to its own domain. */
-const SITE_URL = (process.env.SITE_URL || 'https://adam2kg.github.io/3d-city/').replace(/\/?$/, '/');
+const SITE_URL = (process.env.SITE_URL || 'https://yourplace3d.github.io/3d-city/').replace(/\/?$/, '/');
 const PAGES = ['', 'about/'];
 
 /** Fills %SITE_URL% in the pages (canonical and preview links must be absolute) and writes sitemap.xml and robots.txt. */
