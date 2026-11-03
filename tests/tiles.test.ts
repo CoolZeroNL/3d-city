@@ -61,14 +61,14 @@ describe('vector tile data', () => {
     expect(d.buildings.filter((b) => b.height === 12)).toHaveLength(2);
   });
 
-  it('does not double buildings that cross a tile edge or sit in neighbours’ buffers', () => {
+  it('neither doubles nor splits buildings that cross a tile edge or sit in neighbours’ buffers', () => {
     // find the vertical edge between two tiles near the centre and straddle it
     const b = tileBounds(refs[0], proj);
     const edgeE = b[2];
     const tiles = makeTiles({ building: fc([feat({ type: 'Polygon', coordinates: box(edgeE - 20, b[1] + 200, 40, 20) }, { render_height: 9 })]) }, refs);
     const d = parseTiles(tiles, C, 4000);
     const total = d.buildings.reduce((a, x) => a + area(x.poly), 0);
-    expect(d.buildings.length).toBe(2); // one piece per tile
+    expect(d.buildings.length).toBe(1); // cut by the tiles, joined again
     expect(total).toBeGreaterThan(760);
     expect(total).toBeLessThan(840); // ≈ 40 × 20 m, not twice that
   });

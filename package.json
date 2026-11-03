@@ -17,6 +17,7 @@
     "@mapbox/vector-tile": "2.0.3",
     "earcut": "3.2.4",
     "pbf": "4.0.1",
+    "polygon-clipping": "0.15.7",
     "three": "0.187.0"
   },
   "devDependencies": {

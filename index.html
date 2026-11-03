@@ -159,6 +159,18 @@
           </div>
           <button type="button" class="btn btn-wide" id="native-share-btn" hidden>Share…</button>
           <button type="button" class="btn btn-wide btn-primary" id="poster-btn">Download poster (PNG)</button>
+          <div class="print-block">
+            <div class="control-label">
+              <span id="print-label">3D print size</span>
+              <small id="print-note"></small>
+            </div>
+            <div class="segmented" role="radiogroup" aria-labelledby="print-label" id="print-size-group">
+              <button type="button" role="radio" data-value="100" aria-checked="false" tabindex="-1">10 cm</button>
+              <button type="button" role="radio" data-value="150" aria-checked="true">15 cm</button>
+              <button type="button" role="radio" data-value="200" aria-checked="false" tabindex="-1">20 cm</button>
+            </div>
+            <button type="button" class="btn btn-wide" id="stl-btn">Download 3D print file (STL)</button>
+          </div>
           <p class="dialog-note" id="share-msg" role="status" aria-live="polite"></p>
         </form>
       </dialog>

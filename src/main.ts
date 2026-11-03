@@ -8,7 +8,8 @@ import { CityModel } from './scene/cityModel';
 import { HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
 import { AREA_SIZES, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
-import { makePoster, posterFileName } from './ui/poster';
+import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl } from './export/stl';
+import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
 import { NoticeView } from './ui/notice';
 import { StatusView } from './ui/status';
@@ -651,6 +652,17 @@ function toast(message: string, ms = 2200): void {
   toastTimer = window.setTimeout(() => (t.hidden = true), ms);
 }
 
+/** Hand a generated file to the browser as a download. */
+function saveBlob(blob: Blob, name: string): void {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
 function bindShare(): void {
   const dialog = $<HTMLDialogElement>('share-dialog');
   const url = $<HTMLInputElement>('share-url');
@@ -658,10 +670,20 @@ function bindShare(): void {
   const nativeBtn = $<HTMLButtonElement>('native-share-btn');
   nativeBtn.hidden = typeof navigator.share !== 'function';
 
+  let printMm = 150;
+  const updatePrintNote = () => {
+    $('print-note').textContent = `${printScale(state.size, printMm)} · terrain ×${state.exaggeration.toFixed(1)}`;
+  };
+  radioGroup('print-size-group', (v) => {
+    printMm = Number(v);
+    updatePrintNote();
+  });
+
   $('share-btn').addEventListener('click', () => {
     writeHash();
     url.value = location.href;
     msg.textContent = '';
+    updatePrintNote();
     dialog.showModal();
   });
 
@@ -691,13 +713,7 @@ function bindShare(): void {
     try {
       const title = placeLabel || formatLatLon(state.center);
       const blob = await makePoster(viewer, { title, center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = posterFileName(title, state.size);
-      document.body.append(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      saveBlob(blob, posterFileName(title, state.size));
       msg.textContent = '';
       dialog.close();
       toast('Poster saved');
@@ -706,6 +722,33 @@ function bindShare(): void {
       msg.textContent = 'Couldn’t render the poster on this device.';
     } finally {
       posterBtn.disabled = false;
+    }
+  });
+
+  // 3D print: terrain block + buildings as one watertight STL, in millimetres
+  const stlBtn = $<HTMLButtonElement>('stl-btn');
+  stlBtn.addEventListener('click', async () => {
+    if (!model || !state.center) return;
+    if (debug.stage === 'loading' || debug.stage === 'terrain') {
+      msg.textContent = 'Still loading the buildings — try again in a moment.';
+      return;
+    }
+    stlBtn.disabled = true;
+    msg.textContent = 'Building the 3D print file…';
+    await new Promise((r) => window.setTimeout(r, 30)); // let the message show
+    try {
+      const title = placeLabel || formatLatLon(state.center);
+      const scale = printScale(state.size, printMm);
+      const tris = buildPrint(model.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration });
+      const stl = toBinaryStl(tris, `${title}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
+      saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(title, state.size, `${printMm / 10}cm.stl`));
+      const mb = (stl.byteLength / 1048576).toFixed(stl.byteLength < 10485760 ? 1 : 0);
+      msg.textContent = `Saved: ${printMm / 10} × ${printMm / 10} cm at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).`;
+    } catch (err) {
+      console.error(err);
+      msg.textContent = 'Couldn’t build the 3D print file on this device.';
+    } finally {
+      stlBtn.disabled = false;
     }
   });
 }

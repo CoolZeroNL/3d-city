@@ -22,6 +22,7 @@ import {
   type BuildingsBuild,
 } from './buildingsMesh';
 import { makeElevationUniforms, patchBuildingMaterial, type ElevationUniforms } from './materials';
+import type { PrintBuilding } from '../export/stl';
 import { Overlay } from './overlay';
 import { TerrainModel } from './terrainMesh';
 
@@ -139,6 +140,13 @@ export class CityModel {
 
   pinInfo(): { e: number; n: number; buildings: number; marked: boolean } {
     return { e: this.pinAt[0], n: this.pinAt[1], buildings: this.pinned.length, marked: this.markPinned && this.pinned.length > 0 };
+  }
+
+  /** Buildings for the 3D print: footprints and roof heights as shown (m above the lowest point). */
+  printBuildings(): PrintBuilding[] {
+    const b = this.buildings?.build;
+    if (!b) return [];
+    return this.specs.map((spec, i) => ({ poly: spec.poly, top: (b.buildingGround[i] - this.grid.min) * this.exaggeration + spec.height }));
   }
 
   /** What a ray from the camera hits: a building (pin goes inside it) or open ground. */

@@ -37,12 +37,13 @@ Build and deployment → Source: GitHub Actions**.
 | Pin a house: tap or click a building to move the pin onto it (marked in the accent colour); share links carry it; "Centre here" rebuilds the square around it | ✅ |
 | Share link with the camera in the URL (coordinates only, never the typed address) | ✅ |
 | PNG poster export with title, coordinates and attribution | ✅ |
+| 3D print file: watertight binary STL in millimetres, 10 / 15 / 20 cm wide, terrain exaggeration as on screen | ✅ |
 | Contour lines, interval auto-scaled to relief (5 / 10 / 20 m) | ✅ (v1.1 in the spec, cheap to include) |
 | Area size 1 / 2 / 4 km, white-block or height-colour buildings | ✅ |
 | Progressive loading: terrain → buildings → roads/water/vegetation, with retry | ✅ |
 | Accessibility: keyboard camera, text description of the area, reduced motion, colour-blind-safe ramp | ✅ |
 | Installable PWA (manifest + app-shell service worker), WebGL 2 check | ✅ |
-| Elevation profile, poster PDF (A3/A2), STL/3MF export, imagery drape, compare, time slider | ⏳ later phases |
+| Elevation profile, poster PDF (A3/A2), multi-colour 3MF, imagery drape, compare, time slider | ⏳ later phases |
 | Coloured or painted buildings, photos on buildings | ⏳ later (see "Ideas for later") |
 
 ## How it works
@@ -79,6 +80,12 @@ Design notes:
   villages. Such results are resolved to the settlement the geocoder names for them, and a square
   with fewer than 10 buildings offers the nearest village or town outside it ("Dorstadt is 2.0 km
   north-east — Go to Dorstadt").
+- **The print is a union of closed shells.** The STL holds a terrain block (height grid on top,
+  side walls, flat base) and one closed prism per building that starts inside the block. Slicers
+  union overlapping shells, so a building on a slope is exactly "the part above ground" without any
+  boolean geometry in the browser. Scale is the print width over the square (15 cm for 2 km is
+  1:13,300); buildings keep their real height at that scale, the terrain uses the on-screen
+  exaggeration, and the base is 3 mm under the lowest point.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
 ## Controls
@@ -99,7 +106,8 @@ Design notes:
 - **Photos on the buildings.** Aerial imagery on roofs and ground is the realistic first step —
   the hard part is an imagery licence that allows it. Street-level photos on façades are a much
   bigger job (coverage, licensing, matching photos to walls).
-- **STL / 3MF export** for 3D printing, and **poster styles** (title layouts, colours).
+- **Multi-colour 3MF** (terrain, buildings, roads and water as separate parts for AMS-style printers),
+  a name engraved in the base, and **poster styles** (title layouts, colours).
 
 ## Decisions against the spec's open questions
 
@@ -134,12 +142,14 @@ Design notes:
 
 `npm test` covers projection, terrain decoding/resampling, polygon clipping and ring assembly,
 OSM parsing (multipolygons, courtyards, building parts, clipping), the height rule, the sea fill,
-building-mesh winding and exaggeration, and URL state.
+building-mesh winding and exaggeration, URL state, and the STL export (every shell closed and
+outward-facing, volumes, binary format).
 
 `npm run e2e` serves the build, answers Overpass and geocoding from a deterministic synthetic city
 (`e2e/fixtures/synthetic-city.mjs`), uses real terrain tiles, and drives search, every control,
 keyboard camera, pinning a building (click, drag, share-link round-trip, "Centre here"),
-Shift-arrow and two-finger sliding, share link round-trip, poster download, an Overpass outage with retry, a phone
+Shift-arrow and two-finger sliding, share link round-trip, poster download, STL download (size and
+base checked), an Overpass outage with retry, a phone
 viewport, and dark mode with reduced motion. It fails on any console error.
 
 ## Licence

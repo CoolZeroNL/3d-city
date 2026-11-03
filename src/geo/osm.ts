@@ -7,7 +7,8 @@
  */
 
 import { cacheGet, cacheSet } from './cache';
-import { assembleRings, centroid, clipPolygonToRect, groupPolygons, openRing, pointInRing, withOrientation, type Polygon, type Pt, type Ring } from './polygon';
+import { clipBuildingToRect } from './clip';
+import { assembleRings, centroid, groupPolygons, openRing, pointInRing, withOrientation, type Polygon, type Pt, type Ring } from './polygon';
 import { makeProjector, round, type BBox, type LngLat, type Projector } from './projection';
 
 export const OVERPASS_ENDPOINTS = [
@@ -220,12 +221,14 @@ export function parseBuildings(res: OverpassResponse, center: LngLat, sizeM: num
     const isBuilding = !!tags.building && tags.building !== 'no';
     if (!isPart && !isBuilding) continue;
     const polys = elementPolygons(el, proj);
-    polys.forEach((p, k) => {
-      const clipped = clipPolygonToRect(p, -h, -h, h, h, 2);
-      if (!clipped) return;
-      const f: BuildingFeature = { id: `${el.type[0]}${el.id}${k ? `.${k}` : ''}`, poly: clipped, tags, isPart };
-      (isPart ? parts : outlines).push(f);
-    });
+    let k = 0;
+    for (const p of polys) {
+      for (const clipped of clipBuildingToRect(p, -h, -h, h, h, 2)) {
+        const f: BuildingFeature = { id: `${el.type[0]}${el.id}${k ? `.${k}` : ''}`, poly: clipped, tags, isPart };
+        (isPart ? parts : outlines).push(f);
+        k++;
+      }
+    }
   }
   if (parts.length === 0) return outlines;
   // Drop outlines that host parts. Grid index of outline bounds keeps this fast.

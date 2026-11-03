@@ -13,7 +13,8 @@ import { VectorTile, classifyRings, type VectorTileFeature, type VectorTileLayer
 import Pbf from 'pbf';
 import { cacheGet, cacheSet } from './cache';
 import type { AreaFeature, AreaKind, FeatureSet, LineFeature, LineKind, Settlement, SettlementKind } from './osm';
-import { clipPolygonToRect, signedArea, withOrientation, type Polygon, type Pt, type Ring } from './polygon';
+import { clipBuildingToRect, joinPieces } from './clip';
+import { clipPolygonToRect, ringBounds, signedArea, withOrientation, type Polygon, type Pt, type Ring } from './polygon';
 import { lngLatToTile, makeProjector, type LngLat, type Projector } from './projection';
 
 export const TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
@@ -219,6 +220,8 @@ export function parseTiles(tiles: LoadedTile[], center: LngLat, sizeM: number): 
   const lines: LineFeature[] = [];
   const sea: Polygon[] = [];
   const settlements = new Map<string, Settlement>();
+  // pieces cut off by an edge between two tiles, by height: joined again at the end
+  const seamPieces = new Map<string, Polygon[]>();
 
   for (const t of tiles) {
     const [w, s, e, n] = tileBounds(t, proj);
@@ -235,10 +238,21 @@ export function parseTiles(tiles: LoadedTile[], center: LngLat, sizeM: number): 
       eachFeature(layers.building, (f) => {
         if (f.type !== 3 || f.properties.hide_3d) return; // hide_3d: outline drawn by its building:parts
         const height = Math.max(num(f.properties.render_height, 5), 1);
-        const minHeight = Math.min(num(f.properties.render_min_height, 0), height - 0.5);
+        const minHeight = Math.max(0, Math.min(num(f.properties.render_min_height, 0), height - 0.5));
         for (const p of polygonsOf(f, toLocal)) {
-          const c = clipPolygonToRect(p, bw, bs, be, bn, 2);
-          if (c) buildings.push({ poly: c, height, minHeight: Math.max(0, minHeight) });
+          for (const c of clipBuildingToRect(p, bw, bs, be, bn, 2)) {
+            const [x0, y0, x1, y1] = ringBounds(c.outer);
+            const eps = 1e-6;
+            const onSeam = (bw > -h && x0 <= bw + eps) || (be < h && x1 >= be - eps) || (bs > -h && y0 <= bs + eps) || (bn < h && y1 >= bn - eps);
+            if (!onSeam) {
+              buildings.push({ poly: c, height, minHeight });
+              continue;
+            }
+            const key = `${height}|${minHeight}`;
+            const list = seamPieces.get(key);
+            if (list) list.push(c);
+            else seamPieces.set(key, [c]);
+          }
         }
       });
     }
@@ -300,6 +314,10 @@ export function parseTiles(tiles: LoadedTile[], center: LngLat, sizeM: number): 
       });
     }
     collectPlaces(t, proj, settlements);
+  }
+  for (const [key, pieces] of seamPieces) {
+    const [height, minHeight] = key.split('|').map(Number);
+    for (const poly of joinPieces(pieces)) buildings.push({ poly, height, minHeight });
   }
 
   return { buildings, features: { areas, lines, coastlines: [], sea }, settlements: [...settlements.values()] };

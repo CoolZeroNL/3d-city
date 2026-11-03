@@ -66,6 +66,11 @@ export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400)
 }
 
 export function posterFileName(title: string, sizeM: number): string {
+  return exportFileName(title, sizeM, 'png');
+}
+
+/** "your-place-dorstadt-1km.png", "your-place-dorstadt-1km-15cm.stl" */
+export function exportFileName(title: string, sizeM: number, suffix: string): string {
   const slug = title
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
@@ -73,5 +78,5 @@ export function posterFileName(title: string, sizeM: number): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 48);
-  return `your-place-${slug || 'model'}-${sizeM / 1000}km.png`;
+  return `your-place-${slug || 'model'}-${sizeM / 1000}km${suffix.includes('.') ? '-' : '.'}${suffix}`;
 }

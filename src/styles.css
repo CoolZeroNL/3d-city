@@ -924,6 +924,14 @@ input[type='range'] {
   width: 100%;
 }
 
+.print-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .btn-primary {
   border-color: transparent;
   background: var(--accent);
