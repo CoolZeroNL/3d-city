@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Your Place — turn any address into a 3D miniature of the surrounding city on real terrain.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

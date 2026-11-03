@@ -111,3 +111,8 @@ building-mesh winding and exaggeration, and URL state.
 (`e2e/fixtures/synthetic-city.mjs`), uses real terrain tiles, and drives search, every control,
 keyboard camera, share link round-trip, poster download, an Overpass outage with retry, a phone
 viewport, and dark mode with reduced motion. It fails on any console error.
+
+## Licence
+
+The code is released under the [MIT Licence](LICENSE). Map data and terrain shown by the app keep
+their own licences (see "Data and licences" above).
