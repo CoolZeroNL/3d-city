@@ -8,7 +8,7 @@
  * fill just to the right of every coastline segment, and fill.
  */
 
-import type { Pt } from './polygon';
+import type { Polygon, Pt } from './polygon';
 
 export interface SeaMask {
   /** pixels per side */
@@ -147,4 +147,35 @@ export function seaShare(mask: SeaMask): number {
   let n = 0;
   for (let i = 0; i < mask.data.length; i++) n += mask.data[i];
   return n / mask.data.length;
+}
+
+/** Sea mask from sea polygons (vector tiles), rasterised with a 2D canvas. Browser only. */
+export function seaMaskFromPolygons(polys: Polygon[], sizeM: number, px = 1024): SeaMask | null {
+  if (!polys.length) return null;
+  const canvas: OffscreenCanvas | HTMLCanvasElement =
+    typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(px, px) : Object.assign(document.createElement('canvas'), { width: px, height: px });
+  const ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+  if (!ctx) return null;
+  const s = px / sizeM;
+  const h = sizeM / 2;
+  ctx.setTransform(s, 0, 0, -s, h * s, h * s);
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  for (const p of polys) {
+    for (const ring of [p.outer, ...p.holes]) {
+      ring.forEach(([e, n], i) => (i ? ctx.lineTo(e, n) : ctx.moveTo(e, n)));
+      ctx.closePath();
+    }
+  }
+  ctx.fill('nonzero');
+  const img = ctx.getImageData(0, 0, px, px).data;
+  const data = new Uint8Array(px * px);
+  let any = false;
+  for (let i = 0; i < data.length; i++) {
+    if (img[i * 4 + 3] > 127) {
+      data[i] = 1;
+      any = true;
+    }
+  }
+  return any ? { px, sizeM, data } : null;
 }

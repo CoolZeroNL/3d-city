@@ -17,6 +17,7 @@ export class StatusView {
   private fadeTimer = 0;
   private retry: (() => void) | null = null;
   private message = '';
+  private sticky = false;
 
   constructor(private readonly el: HTMLElement) {}
 
@@ -24,6 +25,7 @@ export class StatusView {
     this.states = { terrain: 'loading', buildings: 'loading', layers: 'loading' };
     this.retry = null;
     this.message = '';
+    this.sticky = false;
     this.render();
   }
 
@@ -37,9 +39,17 @@ export class StatusView {
     return this.states[step];
   }
 
-  /** A one-off message (e.g. search errors), shown in place of the steps. */
+  /** A one-off message (e.g. search errors), shown in place of the steps; fades after a few seconds. */
   say(message: string): void {
     this.message = message;
+    this.sticky = false;
+    this.render();
+  }
+
+  /** Work in progress before loading starts: shown with a spinner until reset() or say(). */
+  busy(message: string): void {
+    this.message = message;
+    this.sticky = true;
     this.render();
   }
 
@@ -55,8 +65,13 @@ export class StatusView {
     if (this.message) {
       const span = document.createElement('span');
       span.textContent = this.message;
+      if (this.sticky) {
+        span.className = 'step';
+        span.dataset.state = 'loading';
+      } else {
+        this.fadeTimer = window.setTimeout(() => this.fadeOut(), 5000);
+      }
       this.el.append(span);
-      this.fadeTimer = window.setTimeout(() => this.fadeOut(), 5000);
       return;
     }
     for (const id of Object.keys(LABELS) as StepId[]) {

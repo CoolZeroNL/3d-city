@@ -127,7 +127,9 @@ export class Overlay {
           for (const hole of p.holes) traceRing(ctx, hole);
         }
       }
-      ctx.fill('evenodd');
+      // outers are counter-clockwise and holes clockwise, so nonzero keeps holes open while
+      // overlapping areas of the same kind (a park on grass) stay filled; evenodd would punch them out
+      ctx.fill('nonzero');
     }
 
     const minW = 0.8 / s; // keep thin lines at least ~0.8 px wide

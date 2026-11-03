@@ -8,11 +8,11 @@ import { BufferGeometry, Color, CylinderGeometry, Group, Mesh, MeshStandardMater
 import type { BuildingFeature, FeatureSet } from '../geo/osm';
 import { pointInRing, type Polygon } from '../geo/polygon';
 import { isEstimated, resolveHeights } from '../geo/heights';
-import { computeSeaMask, isSea, seaShare, type SeaMask } from '../geo/sea';
+import { computeSeaMask, isSea, seaMaskFromPolygons, seaShare, type SeaMask } from '../geo/sea';
 import { contourInterval, sampleGrid, type HeightGrid } from '../geo/terrain';
 import { centroid, type Pt } from '../geo/polygon';
 import type { BuildingStyle, Layers } from '../state';
-import { applyBuildingStyle, buildBuildings, setBuildingsExaggeration, type BuildingsBuild } from './buildingsMesh';
+import { applyBuildingStyle, buildBuildings, setBuildingsExaggeration, type BuildingSpec, type BuildingsBuild } from './buildingsMesh';
 import { makeElevationUniforms, patchBuildingMaterial, type ElevationUniforms } from './materials';
 import { Overlay } from './overlay';
 import { TerrainModel } from './terrainMesh';
@@ -69,16 +69,23 @@ export class CityModel {
     return this.terrain.y(sampleGrid(this.grid, 0, 0));
   }
 
+  /** Buildings from raw OSM tags (Overpass fallback): apply the spec's height rule first. */
   setBuildings(features: BuildingFeature[]): void {
-    this.clearBuildings();
     const centroids = features.map((f) => centroid(f.poly.outer));
     const heights = resolveHeights(features.map((f, i) => ({ tags: f.tags, cx: centroids[i][0], cy: centroids[i][1] })));
-    const specs = features.map((f, i) => ({
-      poly: f.poly,
-      height: heights[i].height,
-      minHeight: heights[i].minHeight,
-      estimated: isEstimated(heights[i].source),
-    }));
+    this.setBuildingSpecs(
+      features.map((f, i) => ({
+        poly: f.poly,
+        height: heights[i].height,
+        minHeight: heights[i].minHeight,
+        estimated: isEstimated(heights[i].source),
+      })),
+    );
+  }
+
+  /** Buildings with heights already decided (vector tiles carry them). */
+  setBuildingSpecs(specs: BuildingSpec[]): void {
+    this.clearBuildings();
     const lowest = (poly: Polygon) => {
       let m = Infinity;
       for (const [e, n] of poly.outer) m = Math.min(m, sampleGrid(this.grid, e, n));
@@ -101,7 +108,10 @@ export class CityModel {
 
   setFeatures(features: FeatureSet): void {
     this.features = features;
-    const sea = this.seaFromCoastlines(features.coastlines);
+    // vector tiles carry the sea as polygons; raw OSM only as coastlines
+    const sea = features.sea?.length
+      ? this.checkSea(seaMaskFromPolygons(features.sea, this.grid.sizeM, 1024))
+      : this.seaFromCoastlines(features.coastlines);
     this.overlay.setSea(sea);
     if (sea) {
       this.seaFraction = seaShare(sea);
@@ -123,7 +133,10 @@ export class CityModel {
    */
   private seaFromCoastlines(coastlines: Pt[][]): SeaMask | null {
     if (!coastlines.length) return null;
-    const mask = computeSeaMask(coastlines, this.grid.sizeM, 1024);
+    return this.checkSea(computeSeaMask(coastlines, this.grid.sizeM, 1024));
+  }
+
+  private checkSea(mask: SeaMask | null): SeaMask | null {
     if (!mask) return null;
     const { n, sizeM, elev } = this.grid;
     const step = sizeM / (n - 1);

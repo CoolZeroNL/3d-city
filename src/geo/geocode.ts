@@ -216,7 +216,9 @@ export async function reverse(c: LngLat, signal?: AbortSignal): Promise<Place | 
     if (!f) return null;
     const p = f.properties;
     // Neighbourhood-level name: a shared link should not resolve back to a street address.
-    const label = p.district || p.city || p.county || p.state || p.name || '';
+    // County and state names are too vague to title a model with; the app names it after
+    // the nearest village instead (from the map tiles).
+    const label = p.district || p.city || '';
     if (!label) return null;
     return { label, detail: [p.city !== label ? p.city : '', p.country].filter(Boolean).join(', '), center: c };
   } catch {

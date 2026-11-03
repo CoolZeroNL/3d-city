@@ -157,3 +157,77 @@ export function synthesize(query) {
   }
   return { elements };
 }
+
+// ---------------------------------------------------------------- vector-tile world
+
+/**
+ * The same synthetic data as GeoJSON layers in the OpenMapTiles schema, for a
+ * fake OpenFreeMap tile server. One "world" per test place, built once:
+ * cities around the city presets, a lone village at Dorstadt with fields around it.
+ */
+export const WORLD_CENTERS = [
+  { lat: 48.7765, lon: 9.1772, sizeM: 5000 }, // Stuttgart
+  { lat: 49.4106, lon: 8.7065, sizeM: 3000 }, // Heidelberg
+  { lat: 38.7139, lon: -9.1365, sizeM: 2000, coast: true }, // Lisbon: coastline 860 m south, inside the 2 km test square
+];
+
+function bboxQuery(c, sizeM, kind) {
+  const dLat = sizeM / 2 / 111200;
+  const dLon = sizeM / 2 / (111320 * Math.cos((c.lat * Math.PI) / 180));
+  return `${kind} (${c.lat - dLat},${c.lon - dLon},${c.lat + dLat},${c.lon + dLon})`;
+}
+
+const coords = (geom) => geom.map((g) => [g.lon, g.lat]);
+const ROAD_CLASS = { motorway: 'motorway', primary: 'primary', secondary: 'secondary', tertiary: 'tertiary', residential: 'minor', footway: 'path' };
+
+function joinOuter(members) {
+  let ring = [];
+  for (const m of members.filter((x) => x.role === 'outer')) ring = ring.length ? ring.concat(coords(m.geometry).slice(1)) : coords(m.geometry);
+  return ring;
+}
+
+function toLayers(elements, layers, keep = () => true) {
+  for (const el of elements) {
+    const t = el.tags ?? {};
+    if (el.type === 'relation') {
+      const outer = joinOuter(el.members);
+      const inners = el.members.filter((m) => m.role === 'inner').map((m) => coords(m.geometry));
+      if (!keep(outer[0])) continue;
+      if (t.building) layers.building.push({ type: 'Feature', properties: { render_height: Number(t.height ?? (t['building:levels'] ?? 3) * 3), render_min_height: 0 }, geometry: { type: 'Polygon', coordinates: [outer, ...inners] } });
+      else if (t.natural === 'water') layers.water.push({ type: 'Feature', properties: { class: 'river' }, geometry: { type: 'Polygon', coordinates: [outer] } });
+      continue;
+    }
+    if (el.type !== 'way') continue;
+    const c = coords(el.geometry);
+    if (!keep(c[0])) continue;
+    if (t.building || t['building:part']) {
+      const h = Number(t.height ?? (t['building:levels'] ? t['building:levels'] * 3 : 9));
+      layers.building.push({ type: 'Feature', properties: { render_height: h, render_min_height: 0, ...(t.building === 'church' ? { hide_3d: true } : {}) }, geometry: { type: 'Polygon', coordinates: [c] } });
+    } else if (t.highway && !t.tunnel) layers.transportation.push({ type: 'Feature', properties: { class: ROAD_CLASS[t.highway] ?? 'minor' }, geometry: { type: 'LineString', coordinates: c } });
+    else if (t.railway) layers.transportation.push({ type: 'Feature', properties: { class: 'rail', subclass: 'rail' }, geometry: { type: 'LineString', coordinates: c } });
+    else if (t.waterway) layers.waterway.push({ type: 'Feature', properties: { class: 'river' }, geometry: { type: 'LineString', coordinates: c } });
+    else if (t.leisure === 'park' || t.landuse === 'grass') layers.landcover.push({ type: 'Feature', properties: { class: 'grass', subclass: 'park' }, geometry: { type: 'Polygon', coordinates: [c] } });
+    else if (t.landuse === 'forest') layers.landcover.push({ type: 'Feature', properties: { class: 'wood', subclass: 'forest' }, geometry: { type: 'Polygon', coordinates: [c] } });
+    else if (t.natural === 'coastline') {
+      // the coastline heads east, sea to the south: close it into an ocean polygon
+      const south = Math.min(...c.map((p) => p[1])) - 0.02;
+      const ring = [...c, [c[c.length - 1][0], south], [c[0][0], south], c[0]];
+      layers.water.push({ type: 'Feature', properties: { class: 'ocean' }, geometry: { type: 'Polygon', coordinates: [ring] } });
+    }
+  }
+}
+
+export function buildWorld() {
+  const layers = { building: [], transportation: [], water: [], waterway: [], landcover: [], place: [] };
+  for (const w of WORLD_CENTERS) {
+    toLayers(synthesize(bboxQuery(w, w.sizeM, 'building')).elements, layers);
+    toLayers(synthesize(bboxQuery(w, w.sizeM, 'features')).elements, layers);
+  }
+  // Dorstadt: a village of ~600 m radius; open fields between it and the postcode middle (RURAL)
+  const near = (p, c, m) => Math.hypot((p[0] - c.lon) * 111320 * Math.cos((c.lat * Math.PI) / 180), (p[1] - c.lat) * 111200) < m;
+  toLayers(synthesize(bboxQuery(DORSTADT, 1400, 'building')).elements, layers, (p) => near(p, DORSTADT, 600));
+  layers.transportation.push({ type: 'Feature', properties: { class: 'tertiary' }, geometry: { type: 'LineString', coordinates: [[RURAL.lon - 0.01, RURAL.lat], [DORSTADT.lon, DORSTADT.lat]] } });
+  for (const s of SETTLEMENTS) layers.place.push({ type: 'Feature', properties: { class: s.tags.place, name: s.tags.name }, geometry: { type: 'Point', coordinates: [s.lon, s.lat] } });
+  layers.place.push({ type: 'Feature', properties: { class: 'city', name: 'Stuttgart' }, geometry: { type: 'Point', coordinates: [9.1772, 48.7765] } });
+  return Object.fromEntries(Object.entries(layers).map(([k, v]) => [k, { type: 'FeatureCollection', features: v }]));
+}

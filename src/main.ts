@@ -1,6 +1,7 @@
 import './styles.css';
 import { KIND_LABEL, resolveToSettlement, reverse, type Place } from './geo/geocode';
-import { buildingsQuery, compassWord, featuresQuery, formatDistance, overpass, parseBuildings, parseFeatures, parseSettlements, pickSettlement, settlementsQuery, type Settlement } from './geo/osm';
+import { buildingsQuery, compassWord, featuresQuery, formatDistance, overpass, parseBuildings, parseFeatures, parseSettlements, pickSettlement, settlementsQuery, type FeatureSet, type Settlement, type SettlementKind } from './geo/osm';
+import { DATA_ZOOM, fetchTiles, parseTiles, settlementsFromTiles, tilesForSquare } from './geo/tiles';
 import { formatLatLon, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
 import { CityModel } from './scene/cityModel';
@@ -42,6 +43,7 @@ const debug = {
   stats: () => model?.stats() ?? null,
   camera: () => (model ? viewer.getCameraState() : null),
   notice: () => (notice.visible ? $('notice-text').textContent : null),
+  source: '' as '' | 'tiles' | 'overpass',
 };
 (window as unknown as { __yourPlace: typeof debug }).__yourPlace = debug;
 
@@ -116,13 +118,33 @@ function gridResolution(size: number): number {
   return size >= 4000 && !viewer.small ? 385 : 257;
 }
 
+/** Overpass is only the fallback; don't let a struggling mirror hold the model for minutes. */
+const OVERPASS_TIMEOUT_MS = 30_000;
 /** Villages within this radius are offered when a square has (almost) no buildings. */
 const RESCUE_RADIUS_M = 8000;
 const FEW_BUILDINGS = 10;
+/** The longest a search may spend finding a postcode's village before the model loads anyway. */
+const RESOLVE_BUDGET_MS = 8000;
 let pickToken = 0;
 
+/** Zoom of the tiles used to look up villages and towns: one ~12 km tile carries all of them. */
+const SETTLEMENT_ZOOM = 11;
+
+/** Villages and towns around a point: from map tiles, else (quick) Overpass. */
 async function settlementsNear(center: LngLat, radiusM: number): Promise<Settlement[]> {
-  return parseSettlements(await overpass(settlementsQuery(center, radiusM)), center);
+  try {
+    return await settlementsFromTiles(center, radiusM, SETTLEMENT_ZOOM);
+  } catch (err) {
+    console.warn('Place lookup from map tiles failed, trying Overpass', err);
+    return parseSettlements(await overpass(settlementsQuery(center, radiusM), undefined, 10_000), center);
+  }
+}
+
+const SIZE_ORDER: SettlementKind[] = ['city', 'town', 'village', 'suburb', 'hamlet'];
+
+/** Resolve with `fallback` if `p` fails or takes longer than `ms`. */
+function withinBudget<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p.catch(() => fallback), new Promise<T>((resolve) => window.setTimeout(() => resolve(fallback), ms))]);
 }
 
 /**
@@ -132,11 +154,19 @@ async function settlementsNear(center: LngLat, radiusM: number): Promise<Settlem
  */
 async function resolvePick(p: Place): Promise<Place> {
   if (p.kind !== 'postcode' && p.kind !== 'area') return p;
-  const named = await resolveToSettlement(p).catch(() => null);
-  if (named) return named;
-  if (p.kind !== 'postcode') return p;
-  const near = await settlementsNear(p.center, 6000).then((l) => pickSettlement(l), () => null);
-  return near ? { label: near.name, detail: `Postcode ${p.label} · ${KIND_LABEL[near.kind]}`, center: near.center, kind: near.kind } : p;
+  const list = await settlementsNear(p.center, 15000).catch(() => null);
+  if (!list) return (await resolveToSettlement(p).catch(() => null)) ?? p;
+  const wanted = p.settlement?.toLowerCase();
+  let chosen = wanted ? list.filter((s) => s.name.toLowerCase() === wanted).sort((a, b) => a.distanceM - b.distanceM)[0] : undefined;
+  if (!chosen && p.kind === 'postcode') chosen = pickSettlement(list.filter((s) => s.distanceM < 6000)) ?? undefined;
+  if (!chosen && p.kind === 'area') {
+    // a county or region: its biggest place nearby
+    const biggest = SIZE_ORDER.find((k) => list.some((s) => s.kind === k));
+    chosen = list.filter((s) => s.kind === biggest).sort((a, b) => a.distanceM - b.distanceM)[0];
+  }
+  if (!chosen) return p;
+  const context = p.kind === 'postcode' ? `Postcode ${p.label}` : p.label;
+  return { label: chosen.name, detail: `${context} · ${KIND_LABEL[chosen.kind]}`, center: chosen.center, kind: chosen.kind };
 }
 
 async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}): Promise<void> {
@@ -145,8 +175,10 @@ async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}):
   syncControls();
   notice.hide();
   const token = ++pickToken;
-  if (p.kind === 'postcode' || p.kind === 'area') status.say(`Finding the centre of ${p.label}…`);
-  const target = await resolvePick(p);
+  // Never leave the user waiting silently: a visible spinner, and a hard time limit after
+  // which the model loads at the original point (the empty-square offer still helps there).
+  if (p.kind === 'postcode' || p.kind === 'area') status.busy(`Finding the village for ${p.label}…`);
+  const target = await withinBudget(resolvePick(p), RESOLVE_BUDGET_MS, p);
   if (token !== pickToken) return;
   await loadPlace(target.center, { label: target.label, detail: target.detail });
 }
@@ -216,8 +248,31 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
 
   const bbox = squareBBox(center, size);
   const terrainP = loadHeightGrid(center, size, gridResolution(size), signal);
-  const buildingsP = overpass(buildingsQuery(bbox), signal);
-  const featuresP = overpass(featuresQuery(bbox), signal);
+  // Map data: vector tiles from a CDN (fast, cached). Overpass only if the tiles fail.
+  const tilesP = fetchTiles(tilesForSquare(center, size, DATA_ZOOM), signal).then((t) => parseTiles(t, center, size));
+  const fallback = (err: unknown) => {
+    if (signal.aborted) throw err;
+    if (debug.source !== 'overpass') console.warn('Map tiles failed, falling back to Overpass', err);
+    debug.source = 'overpass';
+  };
+  const buildingsP: Promise<(m: CityModel) => void> = tilesP.then(
+    (d) => {
+      debug.source = 'tiles';
+      return (m: CityModel) => m.setBuildingSpecs(d.buildings.map((b) => ({ ...b, estimated: false })));
+    },
+    (err) => {
+      fallback(err);
+      return overpass(buildingsQuery(bbox), signal, OVERPASS_TIMEOUT_MS).then((res) => (m: CityModel) => m.setBuildings(parseBuildings(res, center, size)));
+    },
+  );
+  const featuresP: Promise<FeatureSet> = tilesP.then(
+    (d) => d.features,
+    (err) => {
+      fallback(err);
+      return overpass(featuresQuery(bbox), signal, OVERPASS_TIMEOUT_MS).then((res) => parseFeatures(res, center));
+    },
+  );
+  const nearbyP: Promise<Settlement[]> = tilesP.then((d) => d.settlements, () => []);
   // avoid unhandled-rejection noise; errors are handled below
   buildingsP.catch(() => undefined);
   featuresP.catch(() => undefined);
@@ -252,9 +307,9 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   writeHash();
 
   const buildingsTask = buildingsP.then(
-    (res) => {
+    (apply) => {
       if (stale()) return;
-      next.setBuildings(parseBuildings(res, center, size));
+      apply(next);
       viewer.requestRender();
       status.set('buildings', 'done');
       debug.timings.buildings = performance.now() - t0;
@@ -268,10 +323,19 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
       status.set('buildings', 'error', () => loadPlace(center, { ...opts, label: placeLabel || opts.label, camera: viewer.getCameraState() }));
     },
   );
+  void nearbyP.then((list) => {
+    // a shared link to open country: name it after the nearest village rather than the county
+    if (stale() || placeLabel) return;
+    const near = pickSettlement(list.filter((s) => s.distanceM < 4000));
+    if (!near) return;
+    placeLabel = `Near ${near.name}`;
+    setPlaceTitle(placeLabel, placeMetaDetail);
+    describe();
+  });
   const featuresTask = featuresP.then(
-    (res) => {
+    (features) => {
       if (stale()) return;
-      next.setFeatures(parseFeatures(res, center));
+      next.setFeatures(features);
       updateContourNote();
       describe();
       viewer.retarget();
@@ -471,7 +535,7 @@ function describe(): void {
   const km = state.size / 1000;
   const relief = Math.round(s.maxElev - s.minElev);
   const lines = [
-    `${km} × ${km} km around ${placeLabel || 'this point'}.`,
+    `${km} × ${km} km ${placeLabel.startsWith('Near ') ? `near ${placeLabel.slice(5)}` : `around ${placeLabel || 'this point'}`}.`,
     `Ground from ${Math.round(s.minElev)} m to ${Math.round(s.maxElev)} m above sea level (${relief} m of relief).`,
   ];
   if (model.hasBuildings) {

@@ -85,6 +85,8 @@ export interface FeatureSet {
   lines: LineFeature[];
   /** natural=coastline ways (land on the left, sea on the right) */
   coastlines: Pt[][];
+  /** sea areas as polygons, when the source has them (vector tiles) */
+  sea?: Polygon[];
 }
 
 // ---------------------------------------------------------------- queries
@@ -134,8 +136,11 @@ function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
   return signal;
 }
 
-/** Run an Overpass query, trying mirrors in turn. Responses are cached for a week. */
-export async function overpass(query: string, signal?: AbortSignal): Promise<OverpassResponse> {
+/**
+ * Run an Overpass query, trying mirrors in turn. Responses are cached for a week.
+ * `timeoutMs` is per mirror: large data queries need long, quick lookups should not.
+ */
+export async function overpass(query: string, signal?: AbortSignal, timeoutMs = 70_000): Promise<OverpassResponse> {
   const key = `ovp:${query}`;
   const cached = await cacheGet<OverpassResponse>(key);
   if (cached) return cached;
@@ -146,7 +151,7 @@ export async function overpass(query: string, signal?: AbortSignal): Promise<Ove
       const res = await fetch(endpoint, {
         method: 'POST',
         body: new URLSearchParams({ data: query }),
-        signal: withTimeout(signal, 70_000),
+        signal: withTimeout(signal, timeoutMs),
       });
       if (!res.ok) throw new Error(`Overpass ${new URL(endpoint).host}: HTTP ${res.status}`);
       const json = (await res.json()) as OverpassResponse;

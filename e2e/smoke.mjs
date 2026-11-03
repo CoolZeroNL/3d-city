@@ -13,7 +13,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DORSTADT, RURAL, synthesize } from './fixtures/synthetic-city.mjs';
+import { buildWorld, DORSTADT, RURAL, synthesize } from './fixtures/synthetic-city.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
@@ -66,9 +66,38 @@ const postcodeFixture = { type: 'FeatureCollection', features: [{ type: 'Feature
 const dorstadtFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [DORSTADT.lon, DORSTADT.lat] }, properties: { name: 'Dorstadt', osm_key: 'place', osm_value: 'village', state: 'Lower Saxony', country: 'Germany' } }] };
 
 let overpassMode = 'ok';
+let tilesMode = 'ok';
+
+// ---- fake OpenFreeMap: real vector tiles cut from the synthetic world
+const geojsonvt = require('geojson-vt');
+const vtpbf = require('vt-pbf');
+const t0World = Date.now();
+const world = Object.fromEntries(
+  Object.entries(buildWorld()).map(([k, v]) => [k, (geojsonvt.default ?? geojsonvt)(v, { maxZoom: 14, indexMaxZoom: 4, extent: 4096, buffer: 64, tolerance: 1 })]),
+);
+console.log(`synthetic tile world indexed in ${Date.now() - t0World} ms`);
+const TILE_TEMPLATE = 'https://tiles.openfreemap.org/planet/e2e/{z}/{x}/{y}.pbf';
+function tileBytes(z, x, y) {
+  const layers = {};
+  for (const [name, idx] of Object.entries(world)) {
+    const t = idx.getTile(z, x, y);
+    if (t) layers[name] = t;
+  }
+  return Buffer.from(vtpbf.fromGeojsonVt(layers, { version: 2, extent: 4096 }));
+}
 const counters = { overpass: 0, tiles: 0 };
 
 async function routeAll(context) {
+  await context.route(/tiles\.openfreemap\.org\/planet(\?.*)?$/, (route) => {
+    if (tilesMode === 'fail') return route.fulfill({ status: 503, body: 'down' });
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ tiles: [TILE_TEMPLATE], minzoom: 0, maxzoom: 14 }) });
+  });
+  await context.route(/tiles\.openfreemap\.org\/planet\/.+\.pbf/, (route) => {
+    counters.tiles2d = (counters.tiles2d ?? 0) + 1;
+    if (tilesMode === 'fail') return route.fulfill({ status: 503, body: 'down' });
+    const m = /\/(\d+)\/(\d+)\/(\d+)\.pbf/.exec(route.request().url());
+    route.fulfill({ status: 200, contentType: 'application/x-protobuf', headers: { 'access-control-allow-origin': '*' }, body: tileBytes(+m[1], +m[2], +m[3]) });
+  });
   await context.route(/overpass|maps\.mail\.ru/, async (route) => {
     counters.overpass++;
     if (overpassMode === 'fail') return route.fulfill({ status: 504, body: 'Gateway Timeout' });
@@ -76,7 +105,11 @@ async function routeAll(context) {
     await new Promise((r) => setTimeout(r, 300)); // a little latency, like the real thing
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(synthesize(body)) });
   });
-  await context.route(/photon\.komoot\.io\/reverse/, (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(reverseFixture) }));
+  await context.route(/photon\.komoot\.io\/reverse/, (route) => {
+    const lat = Number(new URL(route.request().url()).searchParams.get('lat'));
+    const body = lat > 52 && lat < 52.2 ? { type: 'FeatureCollection', features: [] } : reverseFixture;
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+  });
   await context.route(/photon\.komoot\.io\/api/, (route) => {
     const url = new URL(route.request().url());
     const q = url.searchParams.get('q') ?? '';
@@ -119,6 +152,10 @@ function watchConsole(page, label) {
   page.on('pageerror', (e) => failures.push(`[${label}] page error: ${e.message}`));
 }
 
+function watchConsoleLenient(page, label) {
+  page.on('pageerror', (e) => failures.push(`[${label}] page error: ${e.message}`));
+}
+
 async function waitStage(page, stages, timeout = 180000) {
   await page.waitForFunction((s) => s.includes(window.__yourPlace?.stage), stages, { timeout, polling: 250 });
   return page.evaluate(() => ({ stage: window.__yourPlace.stage, timings: window.__yourPlace.timings, stats: window.__yourPlace.stats() }));
@@ -151,9 +188,10 @@ try {
   console.log('timings (ms, SwiftShader software GL):', JSON.stringify(Object.fromEntries(Object.entries(t.timings).map(([k, v]) => [k, Math.round(v)]))));
   console.log('stats:', JSON.stringify(t.stats));
   expect(t.stage === 'ready', 'model reaches ready state');
+  expect((await page.evaluate(() => window.__yourPlace.source)) === 'tiles', 'map data comes from vector tiles');
   expect(t.stats.buildings > 1000, `buildings are extruded (${t.stats.buildings})`);
   expect(t.stats.maxElev - t.stats.minElev > 20, `terrain has relief (${Math.round(t.stats.minElev)}–${Math.round(t.stats.maxElev)} m)`);
-  expect(t.stats.estimatedShare > 0 && t.stats.estimatedShare < 1, 'some heights estimated, some from tags');
+  expect(t.stats.tallest >= 100, `building heights come from the data (tallest ${Math.round(t.stats.tallest)} m)`);
   const hash = await page.evaluate(() => location.hash);
   expect(/lat=48\.7765/.test(hash) && /cam=/.test(hash), 'URL hash holds coordinates and camera');
   expect(!/stuttgart/i.test(hash), 'URL hash holds no address text');
@@ -216,17 +254,28 @@ try {
   expect(/Mitte|Stuttgart/.test(await p2.textContent('#place-title')), 'shared link resolves a neighbourhood name');
   await p2.close();
 
-  // failure path: Overpass down → terrain still shows, retry offered
+  // map tiles down → Overpass fallback still builds the model
+  tilesMode = 'fail';
+  const pf = await desktop.newPage();
+  watchConsoleLenient(pf, 'tiles-down');
+  await pf.goto(`${base}#lat=48.7765&lon=9.1772&km=1&ex=1.5`);
+  const tf = await waitStage(pf, ['ready', 'error']);
+  expect(tf.stage === 'ready' && (await pf.evaluate(() => window.__yourPlace.source)) === 'overpass' && tf.stats.buildings > 100, 'map tiles down → falls back to Overpass and still builds');
+  await pf.close();
+
+  // failure path: both sources down → terrain still shows, retry offered
   overpassMode = 'fail';
   const p3 = await desktop.newPage();
   p3.on('pageerror', (e) => failures.push(`[failure] page error: ${e.message}`));
-  await p3.goto(`${base}#lat=48.7765&lon=9.1772&km=1&ex=1.5`);
+  // a different spot than the fallback test above, whose Overpass answers are cached by now
+  await p3.goto(`${base}#lat=48.7800&lon=9.1820&km=1&ex=1.5`);
   const t3 = await waitStage(p3, ['error', 'ready']);
   expect(t3.stage === 'error', 'Overpass outage is reported');
   expect(await p3.isVisible('#status .retry'), 'a Retry button is offered');
   await settle(p3, 1500);
   await shot(p3, '07-overpass-down');
   overpassMode = 'ok';
+  tilesMode = 'ok';
   await p3.click('#status .retry');
   const t3b = await waitStage(p3, ['ready'], 180000);
   expect(t3b.stage === 'ready', 'Retry recovers once Overpass answers');
@@ -260,6 +309,7 @@ try {
   const offer = await rp.evaluate(() => window.__yourPlace.notice());
   expect(/^No buildings are mapped here\. Dorstadt \(village\) is \d\.\d km north-east\.$/.test(offer ?? ''), `an empty square offers the nearest village outside it (“${offer}”)`);
   expect(/No buildings are mapped in this square/.test(await rp.textContent('#describe')), 'the description says the square has no buildings');
+  expect(/^Near /.test(await rp.textContent('#place-title')), `a link to open country is titled after the nearest village (“${await rp.textContent('#place-title')}”)`);
   await settle(rp, 1500);
   await shot(rp, '12-empty-square-offer');
   await rp.click('#notice-actions .btn-primary');
