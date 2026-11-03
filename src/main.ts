@@ -743,7 +743,8 @@ function bindShare(): void {
       const stl = toBinaryStl(tris, `${title}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
       saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(title, state.size, `${printMm / 10}cm.stl`));
       const mb = (stl.byteLength / 1048576).toFixed(stl.byteLength < 10485760 ? 1 : 0);
-      msg.textContent = `Saved: ${printMm / 10} × ${printMm / 10} cm at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).`;
+      const left = tris.skipped ? ` ${tris.skipped} building${tris.skipped === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
+      msg.textContent = `Saved: ${printMm / 10} × ${printMm / 10} cm at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${left}`;
     } catch (err) {
       console.error(err);
       msg.textContent = 'Couldn’t build the 3D print file on this device.';

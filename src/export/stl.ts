@@ -49,6 +49,8 @@ type V = [number, number, number];
 export class Triangles {
   data = new Float32Array(9 * 4096);
   count = 0;
+  /** buildings left out because their outline could not be made valid */
+  skipped = 0;
 
   /** Add a triangle, flipped if needed so its normal points along `out`. */
   add(a: V, b: V, c: V, out: V): void {
@@ -251,7 +253,7 @@ function triangulate(fp: Footprint, attempt = 0): { fp: Footprint; flat: number[
   // them; walls keeping a skipped point would leave a hairline gap. Retry without them.
   const used = new Uint8Array(flat.length / 2);
   for (const i of tris) used[i] = 1;
-  if (used.every((u) => u === 1)) return { fp, flat, tris };
+  if (used.every((u) => u === 1)) return roofFitsWalls(rings, tris) ? { fp, flat, tris } : null;
   if (attempt >= 3) return null;
   let k = 0;
   const keep = (r: P2[]) => r.filter(() => used[k++] === 1);
@@ -272,6 +274,38 @@ function segmentsMeet(a: P2, b: P2, c: P2, d: P2): boolean {
   const o4 = orient2(c, d, b);
   if (o1 !== o2 && o3 !== o4) return true; // crossing, or touching at an end
   return o1 === 0 && o2 === 0; // on one line, with overlapping bounding boxes
+}
+
+/**
+ * The roof's boundary is exactly the walls' top edges: every ring edge belongs to one
+ * triangle, every other triangle edge to two. (On degenerate input earcut can return
+ * overlapping triangles whose total area still looks right.)
+ */
+function roofFitsWalls(rings: P2[][], tris: number[]): boolean {
+  const count = new Map<number, number>();
+  const n = rings.reduce((a, r) => a + r.length, 0);
+  const key = (a: number, b: number) => (a < b ? a * n + b : b * n + a);
+  for (let k = 0; k < tris.length; k += 3) {
+    for (const [a, b] of [[tris[k], tris[k + 1]], [tris[k + 1], tris[k + 2]], [tris[k + 2], tris[k]]]) {
+      const e = key(a, b);
+      count.set(e, (count.get(e) ?? 0) + 1);
+    }
+  }
+  let ringEdges = 0;
+  let k0 = 0;
+  for (const r of rings) {
+    for (let i = 0; i < r.length; i++) {
+      if (count.get(key(k0 + i, k0 + ((i + 1) % r.length))) !== 1) return false;
+      ringEdges++;
+    }
+    k0 += r.length;
+  }
+  let single = 0;
+  for (const c of count.values()) {
+    if (c === 1) single++;
+    else if (c !== 2) return false;
+  }
+  return single === ringEdges;
 }
 
 /** No two non-neighbouring edges of the ring touch or cross. */
@@ -340,10 +374,14 @@ function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s:
       continue;
     }
     // the inset closed a narrow notch, or earcut gave up: repair once more, else leave it out
+    let emitted = false;
     for (const fixed of repair(fp)) {
       const ok = triangulate(fixed);
-      if (ok) emitPrism(t, ok.fp, ok.flat, ok.tris, topZ, bottomZ);
+      if (!ok) continue;
+      emitPrism(t, ok.fp, ok.flat, ok.tris, topZ, bottomZ);
+      emitted = true;
     }
+    if (!emitted) t.skipped++;
   }
 }
 
