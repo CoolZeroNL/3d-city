@@ -171,6 +171,8 @@ function findBuilding(page) {
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
         const x = innerWidth * 0.6 + sx * d;
         const y = innerHeight * 0.5 + sy * d;
+        // only where the 3D view itself is on top (not under the tip, a card or the sheet)
+        if (document.elementFromPoint(x, y)?.id !== 'scene') continue;
         const h = yp.pick(x, y);
         if (h?.building && Math.hypot(h.e, h.n) > 60) return { x, y, e: h.e, n: h.n };
       }
