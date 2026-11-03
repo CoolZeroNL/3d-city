@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrint, cleanRing, insetRing, isSimple, printScale, toBinaryStl, Triangles } from '../src/export/stl';
+import { buildPrint, cleanRing, insetRing, isSimple, printScale, toBinaryStl, Triangles, validFootprint } from '../src/export/stl';
 import { clipBuildingToRect } from '../src/geo/clip';
 import { clipPolygonToRect, signedArea } from '../src/geo/polygon';
 import { withOrientation, type Polygon } from '../src/geo/polygon';
@@ -109,9 +109,11 @@ describe('3D print (STL)', () => {
     expect(exact[0].holes).toHaveLength(0); // the courtyard is open to the cut now
     expect(Math.abs(signedArea(exact[0].outer))).toBeCloseTo(15 * 30 - 5 * 10);
     expect(closedShells(buildPrint(flat, exact.map((poly) => ({ poly, top: 10 })), opts))).toBe(true);
-    // ring-by-ring clipping leaves the courtyard touching the cut: back-to-back walls
+    // ring-by-ring clipping leaves the courtyard touching the cut — invalid, but the
+    // print repairs such outlines too
     const naive = clipPolygonToRect(block, -50, -50, 15, 50)!;
-    expect(closedShells(buildPrint(flat, [{ poly: naive, top: 10 }], opts))).toBe(false);
+    expect(validFootprint(naive)).toBe(false);
+    expect(closedShells(buildPrint(flat, [{ poly: naive, top: 10 }], opts))).toBe(true);
     // a U-shape leaving and re-entering the rectangle becomes two buildings
     const u: Polygon = { outer: withOrientation([[0, 0], [30, 0], [30, 30], [20, 30], [20, 10], [10, 10], [10, 30], [0, 30]], true), holes: [] };
     expect(clipBuildingToRect(u, -50, -50, 50, 20)).toHaveLength(1);
@@ -185,6 +187,22 @@ describe('3D print (STL)', () => {
     const block: Polygon = { outer: withOrientation(oct(0, 56, 10), true), holes: [withOrientation(oct(0, 36, 10), false)] };
     const t = buildPrint(flat, [{ poly: block, top: 20 }], { ...opts, sideMm: 200, shellGapMm: undefined });
     expect(closedShells(t)).toBe(true);
+  });
+
+  it('repairs a courtyard that runs along the outer wall', () => {
+    const flat = grid(3, 100, () => 0);
+    // the courtyard's bottom edge lies on the outer ring's bottom edge (invalid, but in the data)
+    const touching: Polygon = { outer: square(0, 0, 30).outer, holes: [withOrientation([[10, 0], [20, 0], [20, 10], [10, 10]], false)] };
+    expect(validFootprint(touching)).toBe(false);
+    const t = buildPrint(flat, [{ poly: touching, top: 10 }], { ...opts, shellGapMm: undefined });
+    expect(closedShells(t)).toBe(true);
+    expect((volume(t) - 100 * 100 * 3) / ((900 - 100) * 11.5)).toBeGreaterThan(0.98);
+  });
+
+  it('merges points closer than 5 µm, so hairline spikes are caught', () => {
+    // a spike whose tip is two points 2 µm apart: its angle is noise until they merge
+    const r: Array<[number, number]> = [[0, 0], [10, 0], [10, 10], [5, 10], [5.0005, 20], [5.0019, 20.0014], [5.002, 10], [0, 10]];
+    expect(cleanRing(r)).toEqual([[0, 0], [10, 0], [10, 10], [0, 10]]);
   });
 
   it('states the scale', () => {

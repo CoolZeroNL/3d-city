@@ -144,7 +144,7 @@ function addTerrainBlock(t: Triangles, grid: HeightGrid, ex: number, s: number, 
  * Also drops hairline spikes (an edge that folds back on itself within ~1°), which
  * would become back-to-back slivers of wall.
  */
-export function cleanRing(ring: Array<[number, number]>): Array<[number, number]> {
+export function cleanRing(ring: Array<[number, number]>, minEdge = 0.005): Array<[number, number]> {
   const r = ring.slice();
   let changed = true;
   while (changed && r.length >= 3) {
@@ -153,7 +153,8 @@ export function cleanRing(ring: Array<[number, number]>): Array<[number, number]
       const p = r[(k - 1 + r.length) % r.length];
       const q = r[k];
       const n = r[(k + 1) % r.length];
-      const same = q[0] === n[0] && q[1] === n[1];
+      // repeated, or closer than `minEdge` (mm) — such points also make spike angles noisy
+      const same = (q[0] === n[0] && q[1] === n[1]) || Math.hypot(n[0] - q[0], n[1] - q[1]) < minEdge;
       const cross = (q[1] - p[1]) * (n[0] - q[0]) - (q[0] - p[0]) * (n[1] - q[1]);
       const straight = cross === 0;
       const dot = (q[0] - p[0]) * (n[0] - q[0]) + (q[1] - p[1]) * (n[1] - q[1]);
@@ -212,7 +213,7 @@ function footprints(poly: Polygon, s: number, inset: number): Footprint[] {
   if (outer.length < 3) return [];
   const holes = poly.holes.map(scale).filter((h) => h.length >= 3);
   const raw = { outer, holes };
-  const valid = [outer, ...holes].every(isSimple) ? [orient(raw)] : repair(raw);
+  const valid = validFootprint(raw) ? [orient(raw)] : repair(raw);
   return valid.map((fp) => insetFootprint(fp, inset)).filter((fp): fp is Footprint => !!fp);
 }
 
@@ -235,7 +236,7 @@ function insetFootprint(fp: Footprint, d: number): Footprint | null {
 /** Roof triangles if the footprint is valid (simple rings, fully triangulated), else null. */
 function triangulate(fp: Footprint, attempt = 0): { fp: Footprint; flat: number[]; tris: number[] } | null {
   const rings = [fp.outer, ...fp.holes];
-  if (!rings.every(isSimple)) return null;
+  if (!validFootprint(fp)) return null;
   const flat: number[] = [];
   const holeIdx: number[] = [];
   for (const ring of rings) {
@@ -259,25 +260,53 @@ function triangulate(fp: Footprint, attempt = 0): { fp: Footprint; flat: number[
   return outer.length >= 3 ? triangulate(next, attempt + 1) : null;
 }
 
+const orient2 = (a: P2, b: P2, c: P2) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+
+/** Segments a–b and c–d cross, touch, or overlap on one line. */
+function segmentsMeet(a: P2, b: P2, c: P2, d: P2): boolean {
+  if (Math.max(c[0], d[0]) < Math.min(a[0], b[0]) || Math.min(c[0], d[0]) > Math.max(a[0], b[0])) return false;
+  if (Math.max(c[1], d[1]) < Math.min(a[1], b[1]) || Math.min(c[1], d[1]) > Math.max(a[1], b[1])) return false;
+  const o1 = orient2(a, b, c);
+  const o2 = orient2(a, b, d);
+  const o3 = orient2(c, d, a);
+  const o4 = orient2(c, d, b);
+  if (o1 !== o2 && o3 !== o4) return true; // crossing, or touching at an end
+  return o1 === 0 && o2 === 0; // on one line, with overlapping bounding boxes
+}
+
 /** No two non-neighbouring edges of the ring touch or cross. */
 export function isSimple(r: P2[]): boolean {
   const m = r.length;
-  const orient = (a: P2, b: P2, c: P2) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
   for (let i = 0; i < m; i++) {
-    const a = r[i];
-    const b = r[(i + 1) % m];
     for (let j = i + 2; j < m; j++) {
       if (i === 0 && j === m - 1) continue; // the edge closing the ring meets the first edge
-      const c = r[j];
-      const d = r[(j + 1) % m];
-      if (Math.max(c[0], d[0]) < Math.min(a[0], b[0]) || Math.min(c[0], d[0]) > Math.max(a[0], b[0])) continue;
-      if (Math.max(c[1], d[1]) < Math.min(a[1], b[1]) || Math.min(c[1], d[1]) > Math.max(a[1], b[1])) continue;
-      const o1 = orient(a, b, c);
-      const o2 = orient(a, b, d);
-      const o3 = orient(c, d, a);
-      const o4 = orient(c, d, b);
-      if (o1 !== o2 && o3 !== o4) return false; // crossing (or touching at an end)
-      if (o1 === 0 && o2 === 0) return false; // overlapping on one line (bounding boxes overlap)
+      if (segmentsMeet(r[i], r[(i + 1) % m], r[j], r[(j + 1) % m])) return false;
+    }
+  }
+  return true;
+}
+
+/** Simple rings that keep apart from each other (a courtyard must not touch the outer wall). */
+export function validFootprint(fp: { outer: P2[]; holes: P2[][] }): boolean {
+  const rings = [fp.outer, ...fp.holes];
+  if (!rings.every(isSimple)) return false;
+  const box = rings.map((r) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of r) {
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+    return [x0, y0, x1, y1];
+  });
+  for (let a = 0; a < rings.length; a++) {
+    for (let b = a + 1; b < rings.length; b++) {
+      const [ax0, ay0, ax1, ay1] = box[a];
+      const [bx0, by0, bx1, by1] = box[b];
+      if (bx0 > ax1 || bx1 < ax0 || by0 > ay1 || by1 < ay0) continue;
+      const ra = rings[a];
+      const rb = rings[b];
+      for (let i = 0; i < ra.length; i++)
+        for (let j = 0; j < rb.length; j++)
+          if (segmentsMeet(ra[i], ra[(i + 1) % ra.length], rb[j], rb[(j + 1) % rb.length])) return false;
     }
   }
   return true;
