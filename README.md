@@ -47,8 +47,9 @@ tiles, terrain and address search straight from free public services.
 
 **Deploys.** `.github/workflows/pages.yml` runs the unit tests, builds, and publishes `dist/` to
 GitHub Pages on every push to `main`. One-time setup: **Settings → Pages → Build and deployment →
-Source: GitHub Actions**. Pushing a version tag (`git tag v1.0.0 && git push origin v1.0.0`)
-publishes a GitHub release with that version’s notes from [CHANGELOG.md](CHANGELOG.md).
+Source: GitHub Actions**. To publish a release, add its section to [CHANGELOG.md](CHANGELOG.md),
+then run the **Release** workflow from the Actions tab with the version number (or push a tag such
+as `v1.0.1`). It creates the tag and a GitHub release with that version’s notes.
 
 **Own domain.** Point a DNS `CNAME` record (e.g. `3d.example.com`) at `adam2kg.github.io`, enter the
 domain under **Settings → Pages → Custom domain**, and change `SITE_URL` in `vite.config.ts` (or set
