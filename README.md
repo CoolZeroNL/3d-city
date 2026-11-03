@@ -16,6 +16,19 @@ npm test           # unit tests (vitest)
 npm run e2e        # build + headless-browser smoke test (needs Playwright), screenshots in e2e/out/
 ```
 
+## Deploying to GitHub Pages
+
+`.github/workflows/your-place-pages.yml` runs the unit tests, builds, and publishes `dist/` to
+GitHub Pages on every push to `main` that touches this app (or manually from the Actions tab).
+The site lives at `https://<owner>.github.io/<repo>/`.
+
+One-time setup in the repository settings:
+
+1. **Actions → General:** allow GitHub Actions to run (forks start with workflows disabled).
+2. **Pages → Build and deployment → Source:** choose **GitHub Actions**.
+   Pages on a *private* repository needs a paid plan (GitHub Pro for personal accounts), and the
+   published site is public to anyone with the link — the app holds no secrets, so that's safe.
+
 ## What's in the MVP
 
 | Spec feature | Status |
