@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrint, cleanRing, printScale, toBinaryStl, Triangles } from '../src/export/stl';
+import { buildPrint, cleanRing, insetRing, printScale, toBinaryStl, Triangles } from '../src/export/stl';
 import { clipBuildingToRect } from '../src/geo/clip';
 import { clipPolygonToRect, signedArea } from '../src/geo/polygon';
 import { withOrientation, type Polygon } from '../src/geo/polygon';
@@ -54,7 +54,7 @@ function closedShells(t: Triangles): boolean {
 }
 
 describe('3D print (STL)', () => {
-  const opts = { sideMm: 100, baseMm: 3, exaggeration: 1 };
+  const opts = { sideMm: 100, baseMm: 3, exaggeration: 1, shellGapMm: 0 };
 
   it('makes a flat site a closed block of the right size', () => {
     const t = buildPrint(grid(5, 100, () => 50), [], opts);
@@ -119,6 +119,24 @@ describe('3D print (STL)', () => {
     // inside: untouched; outside: gone
     expect(clipBuildingToRect(u, -50, -50, 50, 50)[0]).toBe(u);
     expect(clipBuildingToRect(u, 40, 40, 50, 50)).toEqual([]);
+  });
+
+  it('keeps touching houses and stacked parts from sharing any point', () => {
+    const flat = grid(3, 100, () => 0);
+    // two terraced houses sharing a wall, and an outline with an identical building part
+    const row = [square(0, 0, 10), square(10, 0, 10), square(-30, -30, 10), square(-30, -30, 10)].map((poly) => ({ poly, top: 8 }));
+    expect(closedShells(buildPrint(flat, row, opts))).toBe(false); // coincident walls and floors
+    const t = buildPrint(flat, row, { ...opts, shellGapMm: undefined });
+    expect(closedShells(t)).toBe(true);
+    // the default gap is far below what a printer resolves
+    const v = volume(t) - 100 * 100 * 3;
+    expect(v).toBeGreaterThan(4 * 100 * 9.5 * 0.97);
+  });
+
+  it('insets outlines into the solid', () => {
+    const r = insetRing(square(0, 0, 10).outer, 0.5);
+    expect(Math.abs(signedArea(r))).toBeCloseTo(9 * 9, 6);
+    expect(insetRing(square(0, 0, 10).outer, 0)).toEqual(square(0, 0, 10).outer);
   });
 
   it('writes a binary STL that readers recognise', () => {

@@ -28,7 +28,16 @@ export interface PrintOptions {
   baseMm: number;
   /** vertical exaggeration of the terrain, as on screen */
   exaggeration: number;
+  /**
+   * Keep buildings from touching (mm). Terraced houses share walls and building parts
+   * share floors; exactly coincident faces of separate shells make slicers "repair" the
+   * file. A hundredth of a millimetre (varied a little per building) separates them;
+   * slicers close gaps that small, so the print is unchanged.
+   */
+  shellGapMm?: number;
 }
+
+export const PRINT_SHELL_GAP_MM = 0.01;
 
 export const PRINT_SIZES_MM = [100, 150, 200] as const;
 export const PRINT_BASE_MM = 3;
@@ -76,7 +85,12 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
   addTerrainBlock(t, grid, opts.exaggeration, s, base);
   // building columns start halfway into the base: always inside the block
   const bottom = base / 2;
-  for (const b of buildings) addPrism(t, b.poly, b.top * s, bottom, s);
+  const gap = opts.shellGapMm ?? PRINT_SHELL_GAP_MM;
+  buildings.forEach((b, i) => {
+    // vary inset and floor depth per building, so no two shells share a point even when
+    // their outlines are identical (an outline and its building part)
+    addPrism(t, b.poly, b.top * s, bottom - gap * 3 * (i % 97), s, gap * (1 + 0.4 * (i % 5)));
+  });
   return t;
 }
 
@@ -148,13 +162,52 @@ export function cleanRing(ring: Array<[number, number]>): Array<[number, number]
   return r;
 }
 
-/** A closed prism: walls, roof and floor. */
-function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s: number): void {
+type P2 = [number, number];
+
+/**
+ * Move a ring's points by d (mm) into the solid, which lies left of each edge
+ * (mitred corners, capped at sharp spikes).
+ */
+export function insetRing(r: P2[], d: number): P2[] {
+  if (d === 0) return r;
+  const m = r.length;
+  return r.map((q, k) => {
+    const p = r[(k - 1 + m) % m];
+    const n = r[(k + 1) % m];
+    const la = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const lb = Math.hypot(n[0] - q[0], n[1] - q[1]) || 1;
+    // left normals of the two edges meeting at q
+    const n1x = -(q[1] - p[1]) / la;
+    const n1y = (q[0] - p[0]) / la;
+    const n2x = -(n[1] - q[1]) / lb;
+    const n2y = (n[0] - q[0]) / lb;
+    const mx = n1x + n2x;
+    const my = n1y + n2y;
+    const m2 = mx * mx + my * my;
+    if (m2 < 1e-12) return q; // the outline doubles back on itself here
+    const f = Math.min((2 * d) / m2, 4 * d); // miter length d / cos(angle / 2), capped
+    return [q[0] + mx * f, q[1] + my * f] as P2;
+  });
+}
+
+/** A closed prism: walls, roof and floor. `inset` (mm) keeps it from touching its neighbours. */
+function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s: number, inset: number): void {
   if (topZ <= bottomZ) return;
-  const scaled = (ring: Polygon['outer']) => cleanRing(ring.map(([e, nn]) => [e * s, nn * s] as [number, number]));
-  const outer = scaled(poly.outer);
-  if (outer.length < 3) return;
-  const rings = [outer, ...poly.holes.map(scaled).filter((r) => r.length >= 3)];
+  // rings in mm, cleaned, with the solid on the left (outer anticlockwise, holes clockwise —
+  // checked, not trusted), then moved slightly into the solid
+  const prep = (ring: Polygon['outer'], outer: boolean): P2[] | null => {
+    let r = cleanRing(ring.map(([e, nn]) => [e * s, nn * s] as P2));
+    if (r.length < 3) return null;
+    const area = signedArea(r);
+    if (outer !== area > 0) r.reverse();
+    r = cleanRing(insetRing(r, inset));
+    // too small to survive the inset (it turned inside out): drop it
+    if (r.length < 3 || Math.sign(signedArea(r)) !== (outer ? 1 : -1)) return null;
+    return r;
+  };
+  const outer = prep(poly.outer, true);
+  if (!outer) return;
+  const rings = [outer, ...poly.holes.map((h) => prep(h, false)).filter((r): r is P2[] => !!r)];
   const flat: number[] = [];
   const holeIdx: number[] = [];
   for (const ring of rings) {
@@ -164,24 +217,20 @@ function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s:
   const at = (k: number, z: number): V => [flat[k * 2], flat[k * 2 + 1], z];
 
   let k0 = 0;
-  rings.forEach((ring, r) => {
+  for (const ring of rings) {
     const m = ring.length;
-    // the solid is left of each edge for an anticlockwise outer ring and clockwise holes;
-    // don't trust the data's orientation, check it
-    const ccw = signedArea(ring) > 0;
-    const side = (r === 0) === ccw ? 1 : -1;
     for (let k = 0; k < m; k++) {
       const a = k0 + k;
       const b = k0 + ((k + 1) % m);
       const de = flat[b * 2] - flat[a * 2];
       const dn = flat[b * 2 + 1] - flat[a * 2 + 1];
       // solid on the left of the edge → outward normal on the right
-      const out: V = [dn * side, -de * side, 0];
+      const out: V = [dn, -de, 0];
       t.add(at(a, bottomZ), at(b, bottomZ), at(b, topZ), out);
       t.add(at(a, bottomZ), at(b, topZ), at(a, topZ), out);
     }
     k0 += m;
-  });
+  }
   const tris = earcut(flat, holeIdx.length ? holeIdx : undefined, 2);
   for (let k = 0; k < tris.length; k += 3) {
     const [p, q, r] = [tris[k], tris[k + 1], tris[k + 2]];
