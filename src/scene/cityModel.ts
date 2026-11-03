@@ -4,15 +4,23 @@
  * controls in the bottom sheet.
  */
 
-import { BufferGeometry, Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, type IUniform } from 'three';
+import { BufferGeometry, Color, CylinderGeometry, Group, MathUtils, Mesh, MeshStandardMaterial, SphereGeometry, type IUniform, type Object3D, type Raycaster, type Vector3 } from 'three';
 import type { BuildingFeature, FeatureSet } from '../geo/osm';
-import { pointInRing, type Polygon } from '../geo/polygon';
+import { centroid, pointInRing, type Polygon, type Pt } from '../geo/polygon';
 import { isEstimated, resolveHeights } from '../geo/heights';
 import { computeSeaMask, isSea, seaMaskFromPolygons, seaShare, type SeaMask } from '../geo/sea';
 import { contourInterval, sampleGrid, type HeightGrid } from '../geo/terrain';
-import { centroid, type Pt } from '../geo/polygon';
 import type { BuildingStyle, Layers } from '../state';
-import { applyBuildingStyle, buildBuildings, setBuildingsExaggeration, type BuildingSpec, type BuildingsBuild } from './buildingsMesh';
+import {
+  applyBuildingStyle,
+  buildBuildings,
+  buildingOfVertex,
+  buildingsAt,
+  paintBuildings,
+  setBuildingsExaggeration,
+  type BuildingSpec,
+  type BuildingsBuild,
+} from './buildingsMesh';
 import { makeElevationUniforms, patchBuildingMaterial, type ElevationUniforms } from './materials';
 import { Overlay } from './overlay';
 import { TerrainModel } from './terrainMesh';
@@ -28,6 +36,16 @@ export interface ModelStats {
   seaShare: number;
 }
 
+/** Where a tap landed, in metres from the centre; `building` when it hit one. */
+export interface PinHit {
+  e: number;
+  n: number;
+  building: boolean;
+}
+
+/** Buildings up to this size (m) get the pin in their middle; bigger ones where they were tapped. */
+const PIN_MIDDLE_MAX_M = 40;
+
 export class CityModel {
   readonly group = new Group();
   readonly uniforms: ElevationUniforms = makeElevationUniforms();
@@ -35,9 +53,16 @@ export class CityModel {
   readonly terrain: TerrainModel;
   readonly overlay: Overlay;
   private buildings: { build: BuildingsBuild; mesh: Mesh<BufferGeometry, MeshStandardMaterial> } | null = null;
+  private specs: BuildingSpec[] = [];
   private features: FeatureSet | null = null;
   private readonly pin: Group;
-  private pinTop = 0;
+  private readonly accent: Color;
+  /** pin position, metres from the centre (E, N) */
+  private pinAt: Pt = [0, 0];
+  /** the buildings the pin stands on */
+  private pinned: number[] = [];
+  /** paint the pinned building: only for a pin the user placed, not the search result */
+  private markPinned = false;
   private style: BuildingStyle = 'white';
   private seaFraction = 0;
   private layers: Layers = { roads: true, water: true, green: true };
@@ -51,6 +76,7 @@ export class CityModel {
     this.overlay.draw(null, grid.sizeM, this.layers);
     this.terrain = new TerrainModel(grid, this.overlay.texture, this.uniforms, this.contour);
     this.uniforms.uInterval.value = contourInterval(grid.max - grid.min);
+    this.accent = new Color(accent);
     this.pin = makePin(grid.sizeM, accent);
     this.group.add(this.terrain.group, this.pin);
     this.placePin();
@@ -92,7 +118,7 @@ export class CityModel {
       return m;
     };
     const build = buildBuildings(specs, lowest, this.grid.min, this.exaggeration);
-    applyBuildingStyle(build, this.style);
+    this.specs = specs;
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 });
     patchBuildingMaterial(mat);
     const mesh = new Mesh(build.geometry, mat);
@@ -100,10 +126,62 @@ export class CityModel {
     mesh.receiveShadow = true;
     this.buildings = { build, mesh };
     this.group.add(mesh);
-    // the pin should clear the building it stands on
-    const hit = specs.filter((s) => pointInRing([0, 0], s.poly.outer)).reduce((m, s) => Math.max(m, s.height), 0);
-    this.pinTop = hit;
+    this.refreshPin();
+  }
+
+  /** Move the pin (metres from the centre). `mark` paints the building it lands on. */
+  setPin(e: number, n: number, mark = true): void {
+    const h = this.grid.sizeM / 2;
+    this.pinAt = [MathUtils.clamp(e, -h, h), MathUtils.clamp(n, -h, h)];
+    this.markPinned = mark;
+    this.refreshPin();
+  }
+
+  pinInfo(): { e: number; n: number; buildings: number; marked: boolean } {
+    return { e: this.pinAt[0], n: this.pinAt[1], buildings: this.pinned.length, marked: this.markPinned && this.pinned.length > 0 };
+  }
+
+  /** What a ray from the camera hits: a building (pin goes inside it) or open ground. */
+  pick(ray: Raycaster): PinHit | null {
+    const targets: Object3D[] = [this.terrain.surface];
+    if (this.buildings) targets.push(this.buildings.mesh);
+    const hit = ray.intersectObjects(targets, false)[0];
+    if (!hit) return null;
+    const tapped: Pt = [hit.point.x, -hit.point.z];
+    const h = this.grid.sizeM / 2;
+    if (Math.abs(tapped[0]) > h || Math.abs(tapped[1]) > h) return null;
+    if (this.buildings && hit.object === this.buildings.mesh && hit.face) {
+      const [e, n] = this.spotIn(buildingOfVertex(this.buildings.build, hit.face.a), tapped, hit.face.normal);
+      return { e, n, building: true };
+    }
+    return { e: tapped[0], n: tapped[1], building: false };
+  }
+
+  /** A point inside building i for the pin: the middle of a house, else where the tap landed. */
+  private spotIn(i: number, tapped: Pt, normal: Vector3): Pt {
+    const { outer, holes } = this.specs[i].poly;
+    const inside = (p: Pt) => pointInRing(p, outer) && !holes.some((r) => pointInRing(p, r));
+    const bb = this.buildings!.build.bounds;
+    const k = i * 4;
+    if (bb[k + 2] - bb[k] <= PIN_MIDDLE_MAX_M && bb[k + 3] - bb[k + 1] <= PIN_MIDDLE_MAX_M) {
+      const c = centroid(outer);
+      if (inside(c)) return c;
+    }
+    // a wall hit lies on the outline: step inside, against the wall's outward normal (scene z = -N)
+    const step: Pt = [tapped[0] - normal.x * 0.75, tapped[1] + normal.z * 0.75];
+    return inside(step) ? step : tapped;
+  }
+
+  private refreshPin(): void {
+    this.pinned = this.buildings ? buildingsAt(this.buildings.build, this.specs, this.pinAt) : [];
+    this.paint();
     this.placePin();
+  }
+
+  private paint(): void {
+    if (!this.buildings) return;
+    applyBuildingStyle(this.buildings.build, this.style);
+    if (this.markPinned && this.pinned.length) paintBuildings(this.buildings.build, this.pinned, this.accent);
   }
 
   setFeatures(features: FeatureSet): void {
@@ -173,7 +251,7 @@ export class CityModel {
 
   setStyle(style: BuildingStyle): void {
     this.style = style;
-    if (this.buildings) applyBuildingStyle(this.buildings.build, style);
+    this.paint();
   }
 
   setLayers(layers: Layers): void {
@@ -203,9 +281,14 @@ export class CityModel {
   }
 
   private placePin(): void {
-    const ground = this.terrain.y(sampleGrid(this.grid, 0, 0));
-    const stem = Math.max(this.grid.sizeM * 0.04, this.pinTop + this.grid.sizeM * 0.02);
-    this.pin.position.set(0, ground, 0);
+    const [e, n] = this.pinAt;
+    const ground = this.terrain.y(sampleGrid(this.grid, e, n));
+    // the head should clear the roof it stands on
+    let top = ground;
+    const b = this.buildings?.build;
+    if (b) for (const i of this.pinned) top = Math.max(top, (b.buildingGround[i] - this.grid.min) * this.exaggeration + this.specs[i].height);
+    const stem = Math.max(this.grid.sizeM * 0.04, top - ground + this.grid.sizeM * 0.02);
+    this.pin.position.set(e, ground, -n);
     const [stemMesh, head] = this.pin.children as Mesh[];
     stemMesh.scale.set(1, stem, 1);
     stemMesh.position.y = stem / 2;
@@ -218,6 +301,8 @@ export class CityModel {
     this.buildings.mesh.geometry.dispose();
     this.buildings.mesh.material.dispose();
     this.buildings = null;
+    this.specs = [];
+    this.pinned = [];
   }
 
   dispose(): void {

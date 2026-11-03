@@ -162,6 +162,21 @@ async function waitStage(page, stages, timeout = 180000) {
 }
 
 const shot = (page, name) => page.screenshot({ path: join(out, `${name}.png`) });
+
+/** Screen point over a building, away from the centre (searching outwards from the middle of the view). */
+function findBuilding(page) {
+  return page.evaluate(() => {
+    const yp = window.__yourPlace;
+    for (let d = 0; d <= 320; d += 16)
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const x = innerWidth * 0.6 + sx * d;
+        const y = innerHeight * 0.5 + sy * d;
+        const h = yp.pick(x, y);
+        if (h?.building && Math.hypot(h.e, h.n) > 60) return { x, y, e: h.e, n: h.n };
+      }
+    return null;
+  });
+}
 const settle = (page, ms = 600) => page.waitForTimeout(ms);
 
 // ------------------------------------------------------------------ run
@@ -231,6 +246,33 @@ try {
   expect(Math.abs(az) < 1, `compass resets to north (azimuth ${az?.toFixed?.(1)})`);
   expect(cam && cam.tilt > 40, `keyboard tilts the camera (tilt ${cam?.tilt?.toFixed?.(1)}°)`);
 
+  // the pin: click a building → the pin moves onto it, the building is marked, the link carries it
+  const spot = await findBuilding(page);
+  expect(!!spot, 'a building can be picked under the cursor');
+  await page.mouse.click(spot.x, spot.y);
+  await page.waitForFunction(() => /pin=/.test(location.hash), null, { timeout: 5000 }).catch(() => undefined);
+  const pin = await page.evaluate(() => window.__yourPlace.pin());
+  expect(pin?.marked && Math.hypot(pin.e - spot.e, pin.n - spot.n) < 1, 'clicking a building moves the pin onto it and marks it');
+  expect(/^Pin moved to this building/.test((await page.evaluate(() => window.__yourPlace.notice())) ?? ''), 'a notice confirms the pin and offers “Centre here”');
+  expect(/pin=48\.\d{5},9\.\d{5}/.test(await page.evaluate(() => location.hash)), 'the link carries the pin as coordinates');
+  await settle(page, 1200);
+  await shot(page, '04b-pinned-building');
+  await page.mouse.move(spot.x, spot.y);
+  await page.mouse.down();
+  await page.mouse.move(spot.x + 140, spot.y + 10, { steps: 8 });
+  await page.mouse.up();
+  const pinAfterDrag = await page.evaluate(() => window.__yourPlace.pin());
+  expect(pinAfterDrag && Math.abs(pinAfterDrag.e - pin.e) < 1e-6 && Math.abs(pinAfterDrag.n - pin.n) < 1e-6, 'dragging turns the model but leaves the pin');
+  const slideFrom = await page.evaluate(() => window.__yourPlace.camera());
+  await page.focus('#scene');
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowUp');
+  await page
+    .waitForFunction((b) => { const c = window.__yourPlace.camera(); return Math.hypot(c.targetE - b.targetE, c.targetN - b.targetN) > 50; }, slideFrom, { timeout: 15000 })
+    .catch(() => undefined);
+  const slideTo = await page.evaluate(() => window.__yourPlace.camera());
+  expect(Math.hypot(slideTo.targetE - slideFrom.targetE, slideTo.targetN - slideFrom.targetN) > 50, 'Shift + arrow keys slide the model');
+
   // share + poster
   await page.click('#share-btn');
   await page.waitForSelector('#share-dialog[open]');
@@ -252,6 +294,22 @@ try {
   expect(t2.stage === 'ready', 'shared link rebuilds the model');
   expect(s2.contours === true && s2.style === 'ramp' && Math.abs(s2.exaggeration - 3) < 1e-6, 'shared link restores settings');
   expect(/Mitte|Stuttgart/.test(await p2.textContent('#place-title')), 'shared link resolves a neighbourhood name');
+  const pin2 = await p2.evaluate(() => window.__yourPlace.pin());
+  expect(pin2?.marked && Math.hypot(pin2.e - pin.e, pin2.n - pin.n) < 2, 'shared link puts the pin back on the same building');
+  // "Centre here": a new square around the pinned building
+  const spot2 = await findBuilding(p2);
+  await p2.mouse.click(spot2.x, spot2.y);
+  await p2.waitForFunction(() => /^Pin moved/.test(window.__yourPlace.notice() ?? ''), null, { timeout: 5000 }).catch(() => undefined);
+  const wanted = await p2.evaluate(() => window.__yourPlace.state().pin);
+  await p2.click('#notice-actions .btn-primary');
+  await p2
+    .waitForFunction((w) => { const yp = window.__yourPlace; const c = yp.state().center; return c && Math.abs(c.lat - w.lat) < 1e-9 && yp.stage === 'ready'; }, wanted, { timeout: 120000 })
+    .catch(() => undefined);
+  const centred = await p2.evaluate(() => ({ c: window.__yourPlace.state().center, pin: window.__yourPlace.pin() }));
+  expect(
+    centred.c && Math.abs(centred.c.lat - wanted.lat) < 1e-9 && Math.abs(centred.c.lon - wanted.lon) < 1e-9 && centred.pin?.marked && Math.hypot(centred.pin.e, centred.pin.n) < 0.01,
+    '“Centre here” builds a new square around the pinned building',
+  );
   await p2.close();
 
   // map tiles down → Overpass fallback still builds the model
@@ -333,6 +391,25 @@ try {
   expect(!overflow, 'phone: no horizontal overflow');
   await settle(mp, 2000);
   await shot(mp, '09-model-phone');
+  // two fingers slide the model (no turning); one tap pins a building
+  const cdp = await phone.newCDPSession(mp);
+  const camA = await mp.evaluate(() => window.__yourPlace.camera());
+  const fingers = (dy) => [{ x: 150, y: 400 + dy, id: 0 }, { x: 240, y: 400 + dy, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: fingers(0) });
+  for (let k = 1; k <= 8; k++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: fingers(k * 12) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await settle(mp, 1500);
+  const camB = await mp.evaluate(() => window.__yourPlace.camera());
+  expect(
+    Math.hypot(camB.targetE - camA.targetE, camB.targetN - camA.targetN) > 20 && Math.abs(camB.azimuth - camA.azimuth) < 2 && Math.abs(camB.tilt - camA.tilt) < 2,
+    `phone: two fingers slide the model without turning it (moved ${Math.round(Math.hypot(camB.targetE - camA.targetE, camB.targetN - camA.targetN))} m)`,
+  );
+  const tapAt = await findBuilding(mp);
+  if (tapAt) await mp.touchscreen.tap(tapAt.x, tapAt.y);
+  await mp.waitForFunction(() => window.__yourPlace.pin()?.marked, null, { timeout: 5000 }).catch(() => undefined);
+  expect(!!tapAt && (await mp.evaluate(() => window.__yourPlace.pin()?.marked)), 'phone: tapping a building pins it');
+  await settle(mp, 1000);
+  await shot(mp, '09b-pinned-phone');
   await mp.click('#sheet-toggle');
   await settle(mp, 400);
   await shot(mp, '10-sheet-phone');

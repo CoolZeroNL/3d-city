@@ -2,12 +2,12 @@ import './styles.css';
 import { KIND_LABEL, resolveToSettlement, reverse, type Place } from './geo/geocode';
 import { buildingsQuery, compassWord, featuresQuery, formatDistance, overpass, parseBuildings, parseFeatures, parseSettlements, pickSettlement, settlementsQuery, type FeatureSet, type Settlement, type SettlementKind } from './geo/osm';
 import { DATA_ZOOM, fetchTiles, parseTiles, settlementsFromTiles, tilesForSquare } from './geo/tiles';
-import { formatLatLon, squareBBox, type LngLat } from './geo/projection';
+import { formatLatLon, makeProjector, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
 import { CityModel } from './scene/cityModel';
 import { HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
-import { AREA_SIZES, decodeState, encodeState, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
+import { AREA_SIZES, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
 import { NoticeView } from './ui/notice';
@@ -44,6 +44,8 @@ const debug = {
   camera: () => (model ? viewer.getCameraState() : null),
   notice: () => (notice.visible ? $('notice-text').textContent : null),
   source: '' as '' | 'tiles' | 'overpass',
+  pin: () => model?.pinInfo() ?? null,
+  pick: (x: number, y: number) => viewer.pick(x, y),
 };
 (window as unknown as { __yourPlace: typeof debug }).__yourPlace = debug;
 
@@ -59,6 +61,7 @@ viewer.onCameraChange(() => {
   updateCompass();
   scheduleHashWrite();
 });
+viewer.onTap(movePinTo);
 
 renderPresets();
 renderLegend();
@@ -76,6 +79,9 @@ setupSearch({
 });
 
 const wide = window.matchMedia('(min-width: 880px)');
+const coarse = window.matchMedia('(pointer: coarse)');
+$('gesture-hint').textContent = gestureHint();
+coarse.addEventListener('change', () => ($('gesture-hint').textContent = gestureHint()));
 if (wide.matches) setSheetOpen(true);
 const updateInsets = () => {
   const sheet = $('sheet');
@@ -94,10 +100,14 @@ if (state.center) {
 window.addEventListener('hashchange', () => {
   const next = decodeState(location.hash, state);
   if (!next.center) return;
-  if (!state.center || next.center.lat !== state.center.lat || next.center.lon !== state.center.lon || next.size !== state.size) {
+  if (!samePlace(next.center, state.center) || next.size !== state.size) {
     state = next;
     syncControls();
     void loadPlace(next.center, { camera: next.camera });
+  } else if (!samePlace(next.pin, state.pin)) {
+    state.pin = next.pin;
+    if (model) applyPin(model);
+    viewer.requestRender();
   }
 });
 
@@ -172,6 +182,7 @@ async function resolvePick(p: Place): Promise<Place> {
 async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}): Promise<void> {
   if (opts.size) state.size = opts.size;
   if (opts.ex) state.exaggeration = opts.ex;
+  state.pin = null;
   syncControls();
   notice.hide();
   const token = ++pickToken;
@@ -294,6 +305,7 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   next.setContours(state.contours);
   next.setStyle(state.style);
   next.setLayers(state.layers);
+  applyPin(next);
   const old = model;
   model = next;
   viewer.setModel(next);
@@ -352,6 +364,66 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   if (stale()) return;
   debug.timings.total = performance.now() - t0;
   debug.stage = status.get('buildings') === 'error' || status.get('layers') === 'error' ? 'error' : 'ready';
+  if (debug.stage === 'ready') showGestureTip();
+}
+
+// ------------------------------------------------------------------ the pin: "this one is ours"
+
+/** Put the pin where the state says (e.g. from a shared link), or back on the searched point. */
+function applyPin(m: CityModel): void {
+  if (state.pin && state.center) {
+    const [e, n] = makeProjector(state.center).toLocal(state.pin.lon, state.pin.lat);
+    const h = state.size / 2;
+    if (Math.abs(e) <= h && Math.abs(n) <= h) return m.setPin(e, n, true);
+    state.pin = null; // outside a smaller square
+  }
+  m.setPin(0, 0, false);
+}
+
+/** A click or tap on the model moves the pin there; share links carry it. */
+function movePinTo(x: number, y: number): void {
+  if (!model || !state.center) return;
+  const hit = viewer.pick(x, y);
+  if (!hit) return;
+  model.setPin(hit.e, hit.n, true);
+  state.pin = makeProjector(state.center).toLngLat(hit.e, hit.n);
+  viewer.requestRender();
+  writeHash();
+  notice.show(hit.building ? 'Pin moved to this building. Share links now show it.' : 'Pin moved here. Share links now show this spot.', [
+    { label: 'Centre here', primary: true, onClick: centreOnPin },
+    { label: 'Reset pin', onClick: resetPin },
+  ]);
+}
+
+/** Build a new square around the pin, e.g. when the house is near the edge. */
+function centreOnPin(): void {
+  if (!state.pin) return;
+  const cam = viewer.getCameraState();
+  void loadPlace(state.pin, { camera: { ...cam, targetE: 0, targetN: 0 } });
+}
+
+function resetPin(): void {
+  state.pin = null;
+  model?.setPin(0, 0, false);
+  viewer.requestRender();
+  writeHash();
+}
+
+/** Once per browser: say how to pin a house and slide the model. */
+function showGestureTip(): void {
+  try {
+    if (localStorage.getItem('yp:tip-pin')) return;
+    localStorage.setItem('yp:tip-pin', '1');
+  } catch {
+    return;
+  }
+  toast(gestureHint(), 6000);
+}
+
+function gestureHint(): string {
+  return coarse.matches
+    ? 'Tap a building to pin it · two fingers slide and zoom'
+    : 'Click a building to pin it · right-drag or Shift-drag slides the model';
 }
 
 function locate(): void {
@@ -549,7 +621,10 @@ function describe(): void {
   } else {
     note.hidden = true;
   }
-  $<HTMLCanvasElement>('scene').setAttribute('aria-label', `3D model. ${lines.join(' ')} Arrow keys orbit and tilt, plus and minus zoom, N faces north, 0 resets the view.`);
+  $<HTMLCanvasElement>('scene').setAttribute(
+    'aria-label',
+    `3D model. ${lines.join(' ')} Arrow keys orbit and tilt, Shift and arrow keys slide, plus and minus zoom, N faces north, 0 resets the view. Click a building to move the pin there.`,
+  );
 }
 
 // ------------------------------------------------------------------ URL + share
@@ -567,11 +642,13 @@ function writeHash(): void {
   if (`#${h}` !== location.hash) history.replaceState(null, '', `#${h}`);
 }
 
-function toast(message: string): void {
+let toastTimer = 0;
+function toast(message: string, ms = 2200): void {
   const t = $('toast');
   t.textContent = message;
   t.hidden = false;
-  window.setTimeout(() => (t.hidden = true), 2200);
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (t.hidden = true), ms);
 }
 
 function bindShare(): void {

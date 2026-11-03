@@ -10,7 +10,7 @@
 
 import earcut from 'earcut';
 import { BufferAttribute, BufferGeometry, Color } from 'three';
-import type { Polygon } from '../geo/polygon';
+import { pointInRing, ringBounds, type Polygon, type Pt } from '../geo/polygon';
 
 export interface BuildingSpec {
   poly: Polygon;
@@ -29,6 +29,10 @@ export interface BuildingsBuild {
   buildingHeight: Float32Array;
   /** per building: ground elevation (m above sea level) */
   buildingGround: Float32Array;
+  /** per building: first vertex; starts[count] is the vertex count (buildings own contiguous ranges) */
+  starts: Uint32Array;
+  /** per building: footprint bounds e0, n0, e1, n1 */
+  bounds: Float32Array;
   count: number;
   estimatedCount: number;
   maxHeight: number;
@@ -62,6 +66,8 @@ export function buildBuildings(specs: BuildingSpec[], groundElevation: (poly: Po
   const hag = new Float32Array(vCount);
   const bh = new Float32Array(vCount);
   const buildingGround = new Float32Array(specs.length);
+  const starts = new Uint32Array(specs.length + 1);
+  const bounds = new Float32Array(specs.length * 4);
   const index = new Uint32Array(iCount);
   let v = 0;
   let ii = 0;
@@ -84,6 +90,8 @@ export function buildBuildings(specs: BuildingSpec[], groundElevation: (poly: Po
   specs.forEach((s, bi) => {
     const g = groundElevation(s.poly);
     buildingGround[bi] = g;
+    starts[bi] = v;
+    bounds.set(ringBounds(s.poly.outer), bi * 4);
     const top = s.height;
     const bottom = s.minHeight > 0.5 ? s.minHeight : -1.5; // sink slightly so no seam shows on flat ground
     maxHeight = Math.max(maxHeight, top);
@@ -139,6 +147,7 @@ export function buildBuildings(specs: BuildingSpec[], groundElevation: (poly: Po
     }
   });
 
+  starts[specs.length] = v;
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(pos, 3));
   geometry.setAttribute('normal', new BufferAttribute(nrm, 3));
@@ -146,7 +155,32 @@ export function buildBuildings(specs: BuildingSpec[], groundElevation: (poly: Po
   geometry.setAttribute('color', new BufferAttribute(new Float32Array(vCount * 3).fill(1), 3));
   geometry.setIndex(new BufferAttribute(index, 1));
   geometry.computeBoundingSphere();
-  return { geometry, ground, hag, buildingHeight: bh, buildingGround, count: specs.length, estimatedCount, maxHeight };
+  return { geometry, ground, hag, buildingHeight: bh, buildingGround, starts, bounds, count: specs.length, estimatedCount, maxHeight };
+}
+
+/** The building a vertex belongs to (e.g. from a raycast hit's face). */
+export function buildingOfVertex(b: BuildingsBuild, vertex: number): number {
+  let lo = 0;
+  let hi = b.count - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (b.starts[mid] <= vertex) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/** Every building whose footprint contains the point (a house and its parts can overlap). */
+export function buildingsAt(b: BuildingsBuild, specs: BuildingSpec[], pt: Pt): number[] {
+  const [e, n] = pt;
+  const out: number[] = [];
+  for (let i = 0; i < b.count; i++) {
+    const k = i * 4;
+    if (e < b.bounds[k] || n < b.bounds[k + 1] || e > b.bounds[k + 2] || n > b.bounds[k + 3]) continue;
+    const { outer, holes } = specs[i].poly;
+    if (pointInRing(pt, outer) && !holes.some((h) => pointInRing(pt, h))) out.push(i);
+  }
+  return out;
 }
 
 function cross2(a: [number, number], b: [number, number], c: [number, number]): number {
@@ -203,6 +237,20 @@ export function applyBuildingStyle(b: BuildingsBuild, style: 'white' | 'ramp'): 
     arr[v * 3] = c.r;
     arr[v * 3 + 1] = c.g;
     arr[v * 3 + 2] = c.b;
+  }
+  col.needsUpdate = true;
+}
+
+/** Paint whole buildings in one colour, on top of the current style (the pinned house). */
+export function paintBuildings(b: BuildingsBuild, indices: number[], color: Color): void {
+  const col = b.geometry.getAttribute('color') as BufferAttribute;
+  const arr = col.array as Float32Array;
+  for (const i of indices) {
+    for (let v = b.starts[i]; v < b.starts[i + 1]; v++) {
+      arr[v * 3] = color.r;
+      arr[v * 3 + 1] = color.g;
+      arr[v * 3 + 2] = color.b;
+    }
   }
   col.needsUpdate = true;
 }

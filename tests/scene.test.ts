@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Vector3 } from 'three';
-import { applyBuildingStyle, buildBuildings, rampColor, setBuildingsExaggeration } from '../src/scene/buildingsMesh';
+import { Color, Vector3 } from 'three';
+import { applyBuildingStyle, buildBuildings, buildingOfVertex, buildingsAt, paintBuildings, rampColor, setBuildingsExaggeration } from '../src/scene/buildingsMesh';
 import { withOrientation, type Polygon } from '../src/geo/polygon';
 import { decodeState, DEFAULT_STATE, encodeState, type ViewState } from '../src/state';
 
@@ -79,6 +79,33 @@ describe('building extrusion', () => {
     applyBuildingStyle(b, 'white');
     expect(col.getX(0)).toBeGreaterThan(0.9);
   });
+
+  it('keeps each building in one vertex range, so a hit face names its building', () => {
+    expect(b.starts[0]).toBe(0);
+    expect(b.starts[1]).toBe(20);
+    expect(b.starts[3]).toBe(b.geometry.getAttribute('position').count);
+    expect(buildingOfVertex(b, 0)).toBe(0);
+    expect(buildingOfVertex(b, 19)).toBe(0);
+    expect(buildingOfVertex(b, 20)).toBe(1);
+    expect(buildingOfVertex(b, b.starts[3] - 1)).toBe(2);
+  });
+
+  it('finds the buildings under a point, not their courtyards', () => {
+    expect(buildingsAt(b, specs, [105, 5])).toEqual([0]);
+    expect(buildingsAt(b, specs, [5, 5])).toEqual([1]);
+    expect(buildingsAt(b, specs, [20, 20])).toEqual([]); // courtyard
+    expect(buildingsAt(b, specs, [70, 70])).toEqual([]);
+  });
+
+  it('paints only the pinned building', () => {
+    applyBuildingStyle(b, 'white');
+    paintBuildings(b, [1], new Color(1, 0, 0));
+    const col = b.geometry.getAttribute('color');
+    expect(col.getY(b.starts[1])).toBe(0);
+    expect(col.getY(b.starts[2] - 1)).toBe(0);
+    expect(col.getY(b.starts[1] - 1)).toBeGreaterThan(0.9);
+    expect(col.getY(b.starts[2])).toBeGreaterThan(0.9);
+  });
 });
 
 describe('view state URL', () => {
@@ -92,9 +119,18 @@ describe('view state URL', () => {
       style: 'ramp',
       layers: { roads: true, water: false, green: true },
       camera: { azimuth: 33.3, tilt: 41.2, distance: 3456, targetE: -120, targetN: 80 },
+      pin: { lat: 48.77702, lon: 9.17654 },
     };
     const back = decodeState(`#${encodeState(s)}`);
     expect(back).toEqual(s);
+  });
+
+  it('carries a moved pin, and drops a broken or inherited one', () => {
+    const base = { ...DEFAULT_STATE, center: { lat: 1, lon: 2 }, pin: { lat: 1.001, lon: 2.002 } };
+    expect(encodeState(base)).toContain('pin=1.00100,2.00200');
+    expect(decodeState('#lat=1&lon=2&pin=1.5,abc').pin).toBeNull();
+    // a link without a pin clears the one the page had
+    expect(decodeState('#lat=1&lon=2', base).pin).toBeNull();
   });
 
   it('never writes anything but coordinates and view settings', () => {

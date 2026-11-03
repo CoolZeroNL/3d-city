@@ -813,6 +813,10 @@ input[type='range'] {
   color: var(--warn);
 }
 
+.gesture-hint {
+  color: var(--text);
+}
+
 /* ------------------------------------------------------------------ attribution */
 
 .attribution {
@@ -944,11 +948,14 @@ input[type='range'] {
   bottom: calc(var(--sheet-head) + var(--safe-bottom) + 34px);
   transform: translateX(-50%);
   z-index: 40;
+  width: max-content;
+  max-width: calc(100% - 2 * var(--gutter));
   padding: 9px 14px;
-  border-radius: 999px;
+  border-radius: 18px;
   background: var(--text);
   color: var(--surface-solid);
   font-size: 14px;
+  text-align: center;
   box-shadow: var(--shadow);
 }
 

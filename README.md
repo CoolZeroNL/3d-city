@@ -33,7 +33,8 @@ Build and deployment → Source: GitHub Actions**.
 | 3D terrain mesh, 1×–5× vertical exaggeration | ✅ |
 | Extruded buildings: OSM `height` → `building:levels` × 3 m → neighbourhood median, estimated heights flagged | ✅ (no LiDAR step yet) |
 | Roads, water, parks as colour-coded, toggleable layers | ✅ |
-| Orbit / tilt (0–70°) / zoom with touch, mouse and keyboard; compass resets north | ✅ |
+| Orbit / tilt (0–70°) / zoom / slide with touch, mouse and keyboard; compass resets north | ✅ |
+| Pin a house: tap or click a building to move the pin onto it (marked in the accent colour); share links carry it; "Centre here" rebuilds the square around it | ✅ |
 | Share link with the camera in the URL (coordinates only, never the typed address) | ✅ |
 | PNG poster export with title, coordinates and attribution | ✅ |
 | Contour lines, interval auto-scaled to relief (5 / 10 / 20 m) | ✅ (v1.1 in the spec, cheap to include) |
@@ -42,6 +43,7 @@ Build and deployment → Source: GitHub Actions**.
 | Accessibility: keyboard camera, text description of the area, reduced motion, colour-blind-safe ramp | ✅ |
 | Installable PWA (manifest + app-shell service worker), WebGL 2 check | ✅ |
 | Elevation profile, poster PDF (A3/A2), STL/3MF export, imagery drape, compare, time slider | ⏳ later phases |
+| Coloured or painted buildings, photos on buildings | ⏳ later (see "Ideas for later") |
 
 ## How it works
 
@@ -49,10 +51,11 @@ Build and deployment → Source: GitHub Actions**.
 search ─▶ geocode (Photon / Nominatim)
             │
             ▼
-   ┌── terrain tiles (Terrarium PNG, AWS) ──▶ N×N height grid ──▶ terrain mesh + plinth  ─┐
-   ├── Overpass: buildings ──▶ footprints ─▶ height rule ─▶ one merged extruded mesh        ├─▶ three.js scene
-   └── Overpass: roads/water/green/coastline ─▶ canvas texture draped on the terrain        ─┘
-                                              └▶ sea mask from coastlines → flatten to 0 m
+   ┌── terrain tiles (Terrarium PNG, AWS) ──▶ N×N height grid ──▶ terrain mesh + plinth     ─┐
+   ├── vector tiles (OpenFreeMap): buildings with heights ──▶ one merged extruded mesh      ├─▶ three.js scene
+   └── vector tiles: roads/water/green/sea ──▶ canvas texture draped on the terrain         ─┘
+                                           └▶ sea polygons → flatten to 0 m
+       (Overpass API only when the tiles fail: raw OSM, height rule, coastline flood fill)
 ```
 
 - `src/geo/` — data: projection, polygon utilities, terrain tiles, Overpass queries and parsing,
@@ -77,6 +80,26 @@ Design notes:
   with fewer than 10 buildings offers the nearest village or town outside it ("Dorstadt is 2.0 km
   north-east — Go to Dorstadt").
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
+
+## Controls
+
+| | Touch | Mouse | Keyboard (model focused) |
+| --- | --- | --- | --- |
+| Turn and tilt | one finger | drag | arrow keys |
+| Slide | two fingers | right-drag or Shift-drag | Shift + arrow keys |
+| Zoom | pinch | wheel | + / − |
+| Move the pin | tap a building or the ground | click | — |
+| North up / reset | compass / reset buttons | | N / 0 |
+
+## Ideas for later
+
+- **Colour the blocks.** The OpenMapTiles building layer has a `colour` field (from OSM
+  `building:colour` / `building:material`) where mappers recorded one, so a "real colours" style is
+  cheap. Letting people paint their own house builds on the pin, which already marks one building.
+- **Photos on the buildings.** Aerial imagery on roofs and ground is the realistic first step —
+  the hard part is an imagery licence that allows it. Street-level photos on façades are a much
+  bigger job (coverage, licensing, matching photos to walls).
+- **STL / 3MF export** for 3D printing, and **poster styles** (title layouts, colours).
 
 ## Decisions against the spec's open questions
 
@@ -115,7 +138,8 @@ building-mesh winding and exaggeration, and URL state.
 
 `npm run e2e` serves the build, answers Overpass and geocoding from a deterministic synthetic city
 (`e2e/fixtures/synthetic-city.mjs`), uses real terrain tiles, and drives search, every control,
-keyboard camera, share link round-trip, poster download, an Overpass outage with retry, a phone
+keyboard camera, pinning a building (click, drag, share-link round-trip, "Centre here"),
+Shift-arrow and two-finger sliding, share link round-trip, poster download, an Overpass outage with retry, a phone
 viewport, and dark mode with reduced motion. It fails on any console error.
 
 ## Licence

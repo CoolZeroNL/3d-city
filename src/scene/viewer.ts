@@ -15,6 +15,7 @@ import {
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  Raycaster,
   Scene,
   SRGBColorSpace,
   TOUCH,
@@ -25,10 +26,15 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CameraState } from '../state';
-import type { CityModel } from './cityModel';
+import type { CityModel, PinHit } from './cityModel';
 
 export const MAX_TILT_DEG = 70;
 export const DEFAULT_TILT_DEG = 20;
+/** A press that moves less than this (CSS px) and ends within TAP_MS is a tap, not a drag. */
+const TAP_SLOP_PX = { mouse: 5, touch: 10 };
+const TAP_MS = 500;
+/** Shift + arrow keys slide the model: [right, forward] relative to the camera. */
+const SLIDE_KEYS: Record<string, [number, number] | undefined> = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
 
 export function isWebGL2Available(): boolean {
   try {
@@ -60,6 +66,10 @@ export class Viewer {
   private dirty = true;
   private animation: { from: CameraState; to: CameraState; start: number; ms: number } | null = null;
   private readonly cameraListeners = new Set<() => void>();
+  private readonly tapListeners = new Set<(x: number, y: number) => void>();
+  private readonly raycaster = new Raycaster();
+  private readonly pointersDown = new Set<number>();
+  private tapStart: { id: number; x: number; y: number; t: number; slop: number } | null = null;
   private reducedMotion = prefersReducedMotion();
   /** CSS px covered by UI on the left (desktop settings panel); the model is centred in the rest */
   private insetLeft = 0;
@@ -88,7 +98,8 @@ export class Viewer {
     this.controls.screenSpacePanning = false;
     this.controls.minPolarAngle = 0;
     this.controls.maxPolarAngle = MathUtils.degToRad(MAX_TILT_DEG);
-    this.controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_ROTATE };
+    // one finger turns the model; two fingers pinch to zoom and drag to slide it
+    this.controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
     this.controls.addEventListener('change', () => {
       this.clampTarget();
@@ -100,6 +111,7 @@ export class Viewer {
     });
 
     canvas.addEventListener('keydown', (e) => this.onKey(e));
+    this.watchTaps(canvas);
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(canvas.parentElement ?? canvas);
     this.resize();
@@ -113,6 +125,52 @@ export class Viewer {
   onCameraChange(fn: () => void): () => void {
     this.cameraListeners.add(fn);
     return () => this.cameraListeners.delete(fn);
+  }
+
+  /** A click or tap on the model (not a drag); client coordinates. */
+  onTap(fn: (x: number, y: number) => void): () => void {
+    this.tapListeners.add(fn);
+    return () => this.tapListeners.delete(fn);
+  }
+
+  /** What is under a point of the canvas (client coordinates). */
+  pick(clientX: number, clientY: number): PinHit | null {
+    if (!this.model) return null;
+    const r = this.canvas.getBoundingClientRect();
+    const ndc = new Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    return this.model.pick(this.raycaster);
+  }
+
+  /** Client coordinates of a model point (metres E/N from the centre, scene height y), for tests. */
+  screenPoint(e: number, n: number, y: number): { x: number; y: number } {
+    const v = new Vector3(e, y, -n).project(this.camera);
+    const r = this.canvas.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  }
+
+  private watchTaps(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('pointerdown', (e) => {
+      this.pointersDown.add(e.pointerId);
+      const single = this.pointersDown.size === 1 && e.button === 0;
+      const slop = e.pointerType === 'mouse' ? TAP_SLOP_PX.mouse : TAP_SLOP_PX.touch;
+      this.tapStart = single ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), slop } : null;
+    });
+    const end = (e: PointerEvent, cancelled: boolean) => {
+      this.pointersDown.delete(e.pointerId);
+      const s = this.tapStart;
+      if (!s || s.id !== e.pointerId) return;
+      this.tapStart = null;
+      if (cancelled || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > s.slop || performance.now() - s.t > TAP_MS) return;
+      this.tapListeners.forEach((fn) => fn(e.clientX, e.clientY));
+    };
+    canvas.addEventListener('pointerup', (e) => end(e, false));
+    canvas.addEventListener('pointercancel', (e) => end(e, true));
+    canvas.addEventListener('pointermove', (e) => {
+      const s = this.tapStart;
+      if (s && s.id === e.pointerId && Math.hypot(e.clientX - s.x, e.clientY - s.y) > s.slop) this.tapStart = null;
+    });
   }
 
   requestRender(): void {
@@ -249,41 +307,53 @@ export class Viewer {
     if (!this.model || e.altKey || e.ctrlKey || e.metaKey) return;
     // repeated presses accumulate: step from where a running animation is heading
     const c = this.animation ? { ...this.animation.to } : this.getCameraState();
-    let next: CameraState | null = null;
-    switch (e.key) {
-      case 'ArrowLeft':
-        next = { ...c, azimuth: c.azimuth - 10 };
-        break;
-      case 'ArrowRight':
-        next = { ...c, azimuth: c.azimuth + 10 };
-        break;
-      case 'ArrowUp':
-        next = { ...c, tilt: Math.max(0, c.tilt - 5) };
-        break;
-      case 'ArrowDown':
-        next = { ...c, tilt: Math.min(MAX_TILT_DEG, c.tilt + 5) };
-        break;
-      case '+':
-      case '=':
-        next = { ...c, distance: c.distance * 0.85 };
-        break;
-      case '-':
-      case '_':
-        next = { ...c, distance: c.distance / 0.85 };
-        break;
-      case 'n':
-      case 'N':
-        next = { ...c, azimuth: 0 };
-        break;
-      case 'Home':
-      case '0':
-        next = this.defaultCamera();
-        break;
-      default:
-        return;
-    }
+    const dir = e.shiftKey ? SLIDE_KEYS[e.key] : undefined;
+    const next = dir ? this.slid(c, dir) : this.keyStep(c, e.key);
+    if (!next) return;
     e.preventDefault();
     this.setCameraState(next, true);
+  }
+
+  /** Slide the model by a step, relative to the way the camera faces ([right, forward]). */
+  private slid(c: CameraState, [dx, dy]: [number, number]): CameraState {
+    const step = c.distance * 0.12;
+    const az = MathUtils.degToRad(c.azimuth);
+    // forward on the ground is away from the camera; right is forward turned clockwise (E, N)
+    const fwd = [-Math.sin(az), Math.cos(az)];
+    const right = [Math.cos(az), Math.sin(az)];
+    const h = (this.model?.sizeM ?? 0) / 2;
+    return {
+      ...c,
+      targetE: MathUtils.clamp(c.targetE + (right[0] * dx + fwd[0] * dy) * step, -h, h),
+      targetN: MathUtils.clamp(c.targetN + (right[1] * dx + fwd[1] * dy) * step, -h, h),
+    };
+  }
+
+  private keyStep(c: CameraState, key: string): CameraState | null {
+    switch (key) {
+      case 'ArrowLeft':
+        return { ...c, azimuth: c.azimuth - 10 };
+      case 'ArrowRight':
+        return { ...c, azimuth: c.azimuth + 10 };
+      case 'ArrowUp':
+        return { ...c, tilt: Math.max(0, c.tilt - 5) };
+      case 'ArrowDown':
+        return { ...c, tilt: Math.min(MAX_TILT_DEG, c.tilt + 5) };
+      case '+':
+      case '=':
+        return { ...c, distance: c.distance * 0.85 };
+      case '-':
+      case '_':
+        return { ...c, distance: c.distance / 0.85 };
+      case 'n':
+      case 'N':
+        return { ...c, azimuth: 0 };
+      case 'Home':
+      case '0':
+        return this.defaultCamera();
+      default:
+        return null;
+    }
   }
 
   private clampTarget(): void {

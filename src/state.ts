@@ -32,6 +32,8 @@ export interface ViewState {
   style: BuildingStyle;
   layers: Layers;
   camera: CameraState | null;
+  /** where the user put the pin ("this one is ours"); null = at the centre */
+  pin: LngLat | null;
 }
 
 export const DEFAULT_STATE: ViewState = {
@@ -42,6 +44,7 @@ export const DEFAULT_STATE: ViewState = {
   style: 'white',
   layers: { roads: true, water: true, green: true },
   camera: null,
+  pin: null,
 };
 
 export const EXAGGERATION_MIN = 1;
@@ -62,18 +65,20 @@ export function encodeState(s: ViewState): string {
     const c = s.camera;
     p.set('cam', [round(c.azimuth, 1), round(c.tilt, 1), Math.round(c.distance), Math.round(c.targetE), Math.round(c.targetN)].join(','));
   }
-  return p.toString();
+  if (s.pin) p.set('pin', `${round(s.pin.lat, 5).toFixed(5)},${round(s.pin.lon, 5).toFixed(5)}`);
+  // commas are fine in a fragment and keep links readable
+  return p.toString().replace(/%2C/g, ',');
 }
 
 export function decodeState(raw: string, base: ViewState = DEFAULT_STATE): ViewState {
   const p = new URLSearchParams(raw.replace(/^[#?]/, ''));
-  const s: ViewState = { ...base, layers: { ...base.layers }, camera: null };
+  const s: ViewState = { ...base, layers: { ...base.layers }, camera: null, pin: null };
   const lat = Number(p.get('lat'));
   const lon = Number(p.get('lon'));
-  if (p.has('lat') && p.has('lon') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180) {
+  if (p.has('lat') && p.has('lon') && validLatLon(lat, lon)) {
     s.center = { lat, lon };
   } else {
-    return { ...base, center: null };
+    return { ...base, center: null, pin: null };
   }
   const km = Number(p.get('km'));
   const size = (km * 1000) as AreaSize;
@@ -88,5 +93,15 @@ export function decodeState(raw: string, base: ViewState = DEFAULT_STATE): ViewS
   if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
     s.camera = { azimuth: cam[0], tilt: cam[1], distance: cam[2], targetE: cam[3], targetN: cam[4] };
   }
+  const pin = p.get('pin')?.split(',').map(Number);
+  if (pin && pin.length === 2 && validLatLon(pin[0], pin[1])) s.pin = { lat: pin[0], lon: pin[1] };
   return s;
+}
+
+function validLatLon(lat: number, lon: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180;
+}
+
+export function samePlace(a: LngLat | null, b: LngLat | null): boolean {
+  return a === b || (!!a && !!b && a.lat === b.lat && a.lon === b.lon);
 }
