@@ -2,7 +2,7 @@
  * Address search: an ARIA combobox with debounced type-ahead suggestions.
  */
 
-import { searchOnce, suggest, type Place } from '../geo/geocode';
+import { KIND_LABEL, searchOnce, suggest, type Place } from '../geo/geocode';
 import type { LngLat } from '../geo/projection';
 
 export interface SearchOptions {
@@ -48,7 +48,14 @@ export function setupSearch(o: SearchOptions): void {
       label.textContent = p.label;
       const detail = document.createElement('span');
       detail.className = 's-detail';
-      detail.textContent = p.detail;
+      if (p.kind && p.kind !== 'poi') {
+        const kind = document.createElement('span');
+        kind.className = 's-kind';
+        kind.textContent = KIND_LABEL[p.kind];
+        detail.append(kind, p.detail ? ` · ${p.detail}` : '');
+      } else {
+        detail.textContent = p.detail;
+      }
       li.append(label, detail);
       li.addEventListener('pointerdown', (e) => {
         e.preventDefault(); // keep focus; avoid blur closing the list first

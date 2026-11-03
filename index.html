@@ -44,6 +44,13 @@
           <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions" hidden></ul>
         </form>
         <div class="status" id="status" role="status" aria-live="polite" hidden></div>
+        <div class="notice" id="notice" role="status" aria-live="polite" hidden>
+          <p class="notice-text" id="notice-text"></p>
+          <div class="notice-actions" id="notice-actions"></div>
+          <button type="button" class="icon-btn notice-close" id="notice-close" aria-label="Dismiss">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
       </header>
 
       <section class="welcome" id="welcome" aria-labelledby="welcome-title">

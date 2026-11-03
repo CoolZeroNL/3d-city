@@ -13,7 +13,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { synthesize } from './fixtures/synthetic-city.mjs';
+import { DORSTADT, RURAL, synthesize } from './fixtures/synthetic-city.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
@@ -61,6 +61,10 @@ const photon = {
 };
 const reverseFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [PLACE.lon, PLACE.lat] }, properties: { district: 'Mitte', city: 'Stuttgart', country: 'Germany' } }] };
 
+// a rural postcode: Photon returns the postcode area (its middle is open country) naming Dorstadt
+const postcodeFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [RURAL.lon, RURAL.lat] }, properties: { name: '38312', city: 'Dorstadt', country: 'Germany', osm_key: 'boundary', osm_value: 'postal_code' } }] };
+const dorstadtFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [DORSTADT.lon, DORSTADT.lat] }, properties: { name: 'Dorstadt', osm_key: 'place', osm_value: 'village', state: 'Lower Saxony', country: 'Germany' } }] };
+
 let overpassMode = 'ok';
 const counters = { overpass: 0, tiles: 0 };
 
@@ -73,7 +77,14 @@ async function routeAll(context) {
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(synthesize(body)) });
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(reverseFixture) }));
-  await context.route(/photon\.komoot\.io\/api/, (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(photon) }));
+  await context.route(/photon\.komoot\.io\/api/, (route) => {
+    const url = new URL(route.request().url());
+    const q = url.searchParams.get('q') ?? '';
+    let body = photon;
+    if (url.searchParams.get('osm_tag') === 'place') body = dorstadtFixture;
+    else if (/38312/.test(q)) body = postcodeFixture;
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+  });
   await context.route(/nominatim\.openstreetmap\.org/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify([{ lat: String(PLACE.lat), lon: String(PLACE.lon), name: 'Stuttgart', display_name: 'Stuttgart, Baden-Württemberg, Germany' }]) }),
   );
@@ -221,6 +232,42 @@ try {
   expect(t3b.stage === 'ready', 'Retry recovers once Overpass answers');
   await p3.close();
   await desktop.close();
+
+  // ---------------- villages: postcode search and empty squares
+  const vctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await routeAll(vctx);
+  const vp = await vctx.newPage();
+  watchConsole(vp, 'village');
+  await vp.goto(base);
+  await vp.fill('#search-input', '38312');
+  await vp.waitForSelector('#suggestions li[role="option"]');
+  expect(/Postcode area/.test(await vp.textContent('#suggestions')), 'suggestions say what each result is ("Postcode area")');
+  await vp.keyboard.press('ArrowDown');
+  await vp.keyboard.press('Enter');
+  await vp.waitForFunction((d) => { const s = window.__yourPlace.state(); return s.center && Math.abs(s.center.lat - d.lat) < 1e-4; }, DORSTADT, { timeout: 30000 }).catch(() => undefined);
+  await waitStage(vp, ['ready', 'error']);
+  const vs = await vp.evaluate(() => window.__yourPlace.state());
+  expect(Math.abs(vs.center.lat - DORSTADT.lat) < 1e-4 && Math.abs(vs.center.lon - DORSTADT.lon) < 1e-4, 'a postcode search builds the model around its village, not the postcode area’s middle');
+  expect(/Dorstadt/.test(await vp.textContent('#place-title')) && /Postcode 38312/.test(await vp.textContent('#place-meta')), 'title names the village and keeps the postcode as context');
+  expect((await vp.evaluate(() => window.__yourPlace.notice())) === null, 'no empty-square notice when there are buildings');
+  await vp.close();
+
+  const rp = await vctx.newPage();
+  watchConsole(rp, 'rural');
+  await rp.goto(`${base}#lat=${RURAL.lat}&lon=${RURAL.lon}&km=1&ex=2`);
+  await waitStage(rp, ['ready', 'error']);
+  await rp.waitForFunction(() => window.__yourPlace.notice(), null, { timeout: 20000 }).catch(() => undefined);
+  const offer = await rp.evaluate(() => window.__yourPlace.notice());
+  expect(/^No buildings are mapped here\. Dorstadt \(village\) is \d\.\d km north-east\.$/.test(offer ?? ''), `an empty square offers the nearest village outside it (“${offer}”)`);
+  expect(/No buildings are mapped in this square/.test(await rp.textContent('#describe')), 'the description says the square has no buildings');
+  await settle(rp, 1500);
+  await shot(rp, '12-empty-square-offer');
+  await rp.click('#notice-actions .btn-primary');
+  await rp.waitForFunction((d) => { const yp = window.__yourPlace; const s = yp.state(); return s.center && Math.abs(s.center.lat - d.lat) < 1e-4 && yp.stage === 'ready'; }, DORSTADT, { timeout: 60000 }).catch(() => undefined);
+  const jumped = await rp.evaluate(() => ({ s: window.__yourPlace.state(), stats: window.__yourPlace.stats(), notice: window.__yourPlace.notice() }));
+  expect(Math.abs(jumped.s.center.lat - DORSTADT.lat) < 1e-4 && jumped.stats.buildings > 100 && jumped.notice === null, '“Go to Dorstadt” moves the model to the village');
+  expect(/Dorstadt/.test(await rp.textContent('#place-title')), 'title follows the jump');
+  await vctx.close();
 
   // ---------------- phone
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

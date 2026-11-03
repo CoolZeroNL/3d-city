@@ -29,6 +29,7 @@ Build and deployment → Source: GitHub Actions**.
 | Spec feature | Status |
 | --- | --- |
 | Address search with autocomplete, "use my location", raw `lat, lon` input | ✅ |
+| Villages and postcodes: postcode areas resolve to their village; a (nearly) empty square offers the nearest village or town | ✅ |
 | 3D terrain mesh, 1×–5× vertical exaggeration | ✅ |
 | Extruded buildings: OSM `height` → `building:levels` × 3 m → neighbourhood median, estimated heights flagged | ✅ (no LiDAR step yet) |
 | Roads, water, parks as colour-coded, toggleable layers | ✅ |
@@ -70,6 +71,11 @@ Design notes:
 - **The sea comes from coastlines, not elevation.** Terrain tiles report harbour water as ~0 m while
   polders sit below sea level, so elevation can't tell them apart. OSM coastlines (land on the left)
   are rasterised and the sea side flood-filled, then checked against the terrain before use.
+- **Rural searches land on the village, not in a field.** Geocoders place a postcode or
+  administrative area at the middle of its area — for rural postcodes that is open country between
+  villages. Such results are resolved to the settlement the geocoder names for them, and a square
+  with fewer than 10 buildings offers the nearest village or town outside it ("Dorstadt is 2.0 km
+  north-east — Go to Dorstadt").
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
 ## Decisions against the spec's open questions

@@ -35,8 +35,21 @@ function rng(seed) {
   };
 }
 
+/** A spot in open country between villages (the middle of postcode area 38312) and its villages. */
+export const RURAL = { lat: 52.0835, lon: 10.5531 };
+export const DORSTADT = { lat: 52.0967, lon: 10.5719 };
+const SETTLEMENTS = [
+  { type: 'node', id: 1, lat: DORSTADT.lat, lon: DORSTADT.lon, tags: { place: 'village', name: 'Dorstadt' } },
+  { type: 'node', id: 2, lat: 52.085, lon: 10.556, tags: { place: 'hamlet', name: 'Gut Nord' } },
+  { type: 'node', id: 3, lat: 52.162, lon: 10.537, tags: { place: 'town', name: 'Wolfenbüttel' } },
+];
+
 export function synthesize(query) {
+  if (/\["place"~/.test(query)) return { elements: SETTLEMENTS };
   const b = parseBBox(query);
+  const mid = { lat: (b.south + b.north) / 2, lon: (b.west + b.east) / 2 };
+  const rural = Math.abs(mid.lat - RURAL.lat) < 0.003 && Math.abs(mid.lon - RURAL.lon) < 0.004;
+  if (rural && /building/.test(query)) return { elements: [] };
   const { half, ll } = projector(b);
   const closed = (pts) => [...pts, pts[0]].map(([e, n]) => ll(e, n));
   const line = (pts) => pts.map(([e, n]) => ll(e, n));

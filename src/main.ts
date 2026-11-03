@@ -1,6 +1,6 @@
 import './styles.css';
-import { reverse, type Place } from './geo/geocode';
-import { buildingsQuery, featuresQuery, overpass, parseBuildings, parseFeatures } from './geo/osm';
+import { KIND_LABEL, resolveToSettlement, reverse, type Place } from './geo/geocode';
+import { buildingsQuery, compassWord, featuresQuery, formatDistance, overpass, parseBuildings, parseFeatures, parseSettlements, pickSettlement, settlementsQuery, type Settlement } from './geo/osm';
 import { formatLatLon, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
 import { CityModel } from './scene/cityModel';
@@ -9,6 +9,7 @@ import { isWebGL2Available, Viewer } from './scene/viewer';
 import { AREA_SIZES, decodeState, encodeState, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
+import { NoticeView } from './ui/notice';
 import { StatusView } from './ui/status';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -33,12 +34,14 @@ let abort: AbortController | null = null;
 const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c8431a';
 
 const status = new StatusView($('status'));
+const notice = new NoticeView($('notice'), $('notice-text'), $('notice-actions'), $('notice-close'));
 const debug = {
   state: () => state,
   stage: 'idle' as 'idle' | 'loading' | 'terrain' | 'ready' | 'error',
   timings: {} as Record<string, number>,
   stats: () => model?.stats() ?? null,
   camera: () => (model ? viewer.getCameraState() : null),
+  notice: () => (notice.visible ? $('notice-text').textContent : null),
 };
 (window as unknown as { __yourPlace: typeof debug }).__yourPlace = debug;
 
@@ -113,11 +116,74 @@ function gridResolution(size: number): number {
   return size >= 4000 && !viewer.small ? 385 : 257;
 }
 
-function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}): void {
+/** Villages within this radius are offered when a square has (almost) no buildings. */
+const RESCUE_RADIUS_M = 8000;
+const FEW_BUILDINGS = 10;
+let pickToken = 0;
+
+async function settlementsNear(center: LngLat, radiusM: number): Promise<Settlement[]> {
+  return parseSettlements(await overpass(settlementsQuery(center, radiusM)), center);
+}
+
+/**
+ * Postcode and area results point at the middle of their area — for rural
+ * postcodes that is fields between villages. Build the model around the
+ * settlement instead: the one the geocoder names, else the nearest one.
+ */
+async function resolvePick(p: Place): Promise<Place> {
+  if (p.kind !== 'postcode' && p.kind !== 'area') return p;
+  const named = await resolveToSettlement(p).catch(() => null);
+  if (named) return named;
+  if (p.kind !== 'postcode') return p;
+  const near = await settlementsNear(p.center, 6000).then((l) => pickSettlement(l), () => null);
+  return near ? { label: near.name, detail: `Postcode ${p.label} · ${KIND_LABEL[near.kind]}`, center: near.center, kind: near.kind } : p;
+}
+
+async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}): Promise<void> {
   if (opts.size) state.size = opts.size;
   if (opts.ex) state.exaggeration = opts.ex;
   syncControls();
-  void loadPlace(p.center, { label: p.label, detail: p.detail });
+  notice.hide();
+  const token = ++pickToken;
+  if (p.kind === 'postcode' || p.kind === 'area') status.say(`Finding the centre of ${p.label}…`);
+  const target = await resolvePick(p);
+  if (token !== pickToken) return;
+  await loadPlace(target.center, { label: target.label, detail: target.detail });
+}
+
+/** When a square comes back (nearly) empty, offer the nearest village or town instead of a bare plain. */
+async function offerNearby(center: LngLat, size: AreaSize, count: number, stale: () => boolean): Promise<void> {
+  let list: Settlement[];
+  try {
+    list = await settlementsNear(center, RESCUE_RADIUS_M);
+  } catch {
+    return;
+  }
+  if (stale()) return;
+  const here = count === 0 ? 'No buildings are mapped here' : `Only ${count} building${count === 1 ? ' is' : 's are'} mapped here`;
+  // places inside the square are what is empty: suggest the best one outside it
+  const best = pickSettlement(list, size * 0.6);
+  if (!best) {
+    const inside = pickSettlement(list);
+    notice.show(
+      inside
+        ? `${here} — OpenStreetMap has few buildings mapped around ${inside.name} so far.`
+        : `${here}, and there’s no village or town within ${RESCUE_RADIUS_M / 1000} km.`,
+      size < 4000 ? [{ label: 'Show 4 × 4 km', onClick: () => setSize(4000) }] : [],
+    );
+    return;
+  }
+  const kind = KIND_LABEL[best.kind].toLowerCase();
+  notice.show(`${here}. ${best.name} (${kind}) is ${formatDistance(best.distanceM)} ${compassWord(best.bearingDeg)}.`, [
+    { label: `Go to ${best.name}`, primary: true, onClick: () => void openPlace({ label: best.name, detail: KIND_LABEL[best.kind], center: best.center, kind: best.kind }) },
+  ]);
+}
+
+function setSize(size: AreaSize): void {
+  if (!AREA_SIZES.includes(size) || size === state.size) return;
+  state.size = size;
+  syncControls();
+  if (state.center) void loadPlace(state.center, { label: placeLabel || undefined, detail: placeMetaDetail });
 }
 
 async function loadPlace(center: LngLat, opts: { label?: string; detail?: string; camera?: ViewState['camera'] } = {}): Promise<void> {
@@ -142,6 +208,7 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
       }
     });
   }
+  notice.hide();
   status.reset();
   debug.stage = 'loading';
   const t0 = performance.now();
@@ -192,6 +259,8 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
       status.set('buildings', 'done');
       debug.timings.buildings = performance.now() - t0;
       describe();
+      const count = next.stats().buildings;
+      if (count < FEW_BUILDINGS) void offerNearby(center, size, count, stale);
     },
     (err) => {
       if (stale()) return;
@@ -225,7 +294,7 @@ function locate(): void {
   if (!('geolocation' in navigator)) return status.say('Location is not available in this browser.');
   status.say('Finding your location…');
   navigator.geolocation.getCurrentPosition(
-    (pos) => openPlace({ label: 'Your location', detail: '', center: { lat: pos.coords.latitude, lon: pos.coords.longitude } }),
+    (pos) => void openPlace({ label: 'Your location', detail: '', center: { lat: pos.coords.latitude, lon: pos.coords.longitude } }),
     (err) => status.say(err.code === err.PERMISSION_DENIED ? 'Location permission was denied.' : 'Couldn’t get your location.'),
     { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
   );
@@ -291,13 +360,7 @@ function bindControls(): void {
     scheduleHashWrite();
   });
 
-  radioGroup('size-group', (v) => {
-    const size = Number(v) as AreaSize;
-    if (!AREA_SIZES.includes(size) || size === state.size) return;
-    state.size = size;
-    updateMeta();
-    if (state.center) void loadPlace(state.center, { label: placeLabel || undefined, detail: placeMetaDetail });
-  });
+  radioGroup('size-group', (v) => setSize(Number(v) as AreaSize));
 
   for (const chip of $('layers-group').querySelectorAll<HTMLButtonElement>('[data-layer]')) {
     chip.addEventListener('click', () => {
@@ -412,7 +475,7 @@ function describe(): void {
     `Ground from ${Math.round(s.minElev)} m to ${Math.round(s.maxElev)} m above sea level (${relief} m of relief).`,
   ];
   if (model.hasBuildings) {
-    lines.push(s.buildings ? `${nf.format(s.buildings)} buildings; the tallest is about ${Math.round(s.tallest)} m.` : 'No buildings mapped here.');
+    lines.push(s.buildings ? `${nf.format(s.buildings)} buildings; the tallest is about ${Math.round(s.tallest)} m.` : 'No buildings are mapped in this square.');
   }
   $('describe').textContent = lines.join(' ');
   const note = $('estimate-note');

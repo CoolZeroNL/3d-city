@@ -328,3 +328,75 @@ export function parseFeatures(res: OverpassResponse, center: LngLat): FeatureSet
   }
   return { areas, lines, coastlines };
 }
+
+// ---------------------------------------------------------------- nearby settlements
+
+export type SettlementKind = 'city' | 'town' | 'village' | 'hamlet' | 'suburb';
+
+export interface Settlement {
+  name: string;
+  kind: SettlementKind;
+  center: LngLat;
+  /** from the model centre */
+  distanceM: number;
+  /** compass bearing from the model centre, degrees clockwise from north */
+  bearingDeg: number;
+}
+
+/** Bigger places win over slightly nearer hamlets: distance is divided by this weight. */
+const SETTLEMENT_WEIGHT: Record<SettlementKind, number> = { city: 8, town: 5, suburb: 3, village: 3, hamlet: 1 };
+
+export function settlementsQuery(c: LngLat, radiusM: number): string {
+  return `[out:json][timeout:25];
+node["place"~"^(city|town|village|hamlet|suburb)$"]["name"](around:${Math.round(radiusM)},${round(c.lat, 6)},${round(c.lon, 6)});
+out qt;`;
+}
+
+export function parseSettlements(res: OverpassResponse, center: LngLat): Settlement[] {
+  const proj = makeProjector(center);
+  const out: Settlement[] = [];
+  for (const el of res.elements) {
+    if (el.type !== 'node') continue;
+    const n = el as { lat?: number; lon?: number; tags?: Record<string, string> };
+    const kind = n.tags?.place as SettlementKind | undefined;
+    const name = n.tags?.name;
+    if (!kind || !(kind in SETTLEMENT_WEIGHT) || !name || n.lat == null || n.lon == null) continue;
+    const [e, nn] = proj.toLocal(n.lon, n.lat);
+    out.push({
+      name,
+      kind,
+      center: { lat: n.lat, lon: n.lon },
+      distanceM: Math.hypot(e, nn),
+      bearingDeg: ((Math.atan2(e, nn) * 180) / Math.PI + 360) % 360,
+    });
+  }
+  return out;
+}
+
+/**
+ * The settlement most worth suggesting: near, and preferably a village or town over
+ * a farmstead. `minDistanceM` skips places already in view (they are what's empty).
+ */
+export function pickSettlement(list: Settlement[], minDistanceM = 0): Settlement | null {
+  let best: Settlement | null = null;
+  let bestScore = Infinity;
+  for (const s of list) {
+    if (s.distanceM < minDistanceM) continue;
+    const score = Math.max(s.distanceM, 150) / SETTLEMENT_WEIGHT[s.kind];
+    if (score < bestScore) {
+      bestScore = score;
+      best = s;
+    }
+  }
+  return best;
+}
+
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+
+export function compassWord(bearingDeg: number): string {
+  return COMPASS[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];
+}
+
+export function formatDistance(m: number): string {
+  return m < 950 ? `${Math.round(m / 50) * 50} m` : `${(m / 1000).toFixed(m < 9950 ? 1 : 0)} km`;
+}

@@ -346,6 +346,53 @@ a {
   }
 }
 
+/* ------------------------------------------------------------------ notice */
+
+.notice {
+  position: relative;
+  padding: 12px 44px 12px 14px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+}
+
+.notice-text {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.notice-actions:empty {
+  display: none;
+}
+
+.notice-actions .btn {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.notice-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+}
+
+.suggestions .s-kind {
+  color: var(--accent);
+  font-weight: 560;
+}
+
 /* ------------------------------------------------------------------ welcome */
 
 .welcome {
