@@ -13,12 +13,13 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildWorld, DORSTADT, RURAL, synthesize } from './fixtures/synthetic-city.mjs';
+import { buildWorld, VILLAGE, RURAL, synthesize } from './fixtures/synthetic-city.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
+let devices;
 try {
-  ({ chromium } = require('playwright'));
+  ({ chromium, devices } = require('playwright'));
 } catch {
   console.error('Playwright is not installed. Install it with `npm i -D playwright && npx playwright install chromium`.');
   process.exit(2);
@@ -36,7 +37,7 @@ if (!existsSync(join(dist, 'index.html'))) {
 
 // ------------------------------------------------------------------ static server
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.json': 'application/json' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };
 const server = createServer((req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
   let file = join(dist, path);
@@ -61,9 +62,9 @@ const photon = {
 };
 const reverseFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [PLACE.lon, PLACE.lat] }, properties: { district: 'Mitte', city: 'Stuttgart', country: 'Germany' } }] };
 
-// a rural postcode: Photon returns the postcode area (its middle is open country) naming Dorstadt
-const postcodeFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [RURAL.lon, RURAL.lat] }, properties: { name: '38312', city: 'Dorstadt', country: 'Germany', osm_key: 'boundary', osm_value: 'postal_code' } }] };
-const dorstadtFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [DORSTADT.lon, DORSTADT.lat] }, properties: { name: 'Dorstadt', osm_key: 'place', osm_value: 'village', state: 'Lower Saxony', country: 'Germany' } }] };
+// a rural postcode: Photon returns the postcode area (its middle is open country) naming Kleinfelde
+const postcodeFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [RURAL.lon, RURAL.lat] }, properties: { name: '84999', city: 'Kleinfelde', country: 'Germany', osm_key: 'boundary', osm_value: 'postal_code' } }] };
+const villageFixture = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [VILLAGE.lon, VILLAGE.lat] }, properties: { name: 'Kleinfelde', osm_key: 'place', osm_value: 'village', state: 'Bavaria', country: 'Germany' } }] };
 
 let overpassMode = 'ok';
 let tilesMode = 'ok';
@@ -107,15 +108,15 @@ async function routeAll(context) {
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => {
     const lat = Number(new URL(route.request().url()).searchParams.get('lat'));
-    const body = lat > 52 && lat < 52.2 ? { type: 'FeatureCollection', features: [] } : reverseFixture;
+    const body = lat > 48.4 && lat < 48.6 ? { type: 'FeatureCollection', features: [] } : reverseFixture;
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
   });
   await context.route(/photon\.komoot\.io\/api/, (route) => {
     const url = new URL(route.request().url());
     const q = url.searchParams.get('q') ?? '';
     let body = photon;
-    if (url.searchParams.get('osm_tag') === 'place') body = dorstadtFixture;
-    else if (/38312/.test(q)) body = postcodeFixture;
+    if (url.searchParams.get('osm_tag') === 'place') body = villageFixture;
+    else if (/84999/.test(q)) body = postcodeFixture;
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
   });
   await context.route(/nominatim\.openstreetmap\.org/, (route) =>
@@ -194,6 +195,29 @@ try {
   await page.waitForSelector('#welcome', { state: 'visible' });
   expect((await page.locator('.preset').count()) === 6, 'landing shows 6 preset places');
   await shot(page, '01-landing-desktop');
+  const head = await page.evaluate(() => {
+    const meta = (sel) => document.querySelector(sel)?.getAttribute('content') ?? '';
+    let ld = null;
+    try { ld = JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent ?? ''); } catch {}
+    return {
+      title: document.title,
+      description: meta('meta[name="description"]'),
+      canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? '',
+      ogImage: meta('meta[property="og:image"]'),
+      twitterCard: meta('meta[name="twitter:card"]'),
+      ld,
+    };
+  });
+  expect(head.title.length > 20 && head.title.length <= 60, `page title fits search results (${head.title.length} characters)`);
+  expect(head.description.length >= 100 && head.description.length <= 160, `meta description fits search results (${head.description.length} characters)`);
+  expect(/^https:\/\/.+\/$/.test(head.canonical) && !head.canonical.includes('%'), `canonical link is an absolute URL (${head.canonical})`);
+  expect(head.ogImage === `${head.canonical}og.jpg` && head.twitterCard === 'summary_large_image', 'link previews point at the preview image');
+  expect(head.ld?.['@type'] === 'WebApplication' && head.ld.url === head.canonical, 'structured data describes the app');
+  for (const f of ['og.jpg', 'sitemap.xml', 'robots.txt', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'screenshot.jpg']) {
+    expect(existsSync(join(dist, f)), `build includes ${f}`);
+  }
+  const sitemap = readFileSync(join(dist, 'sitemap.xml'), 'utf8');
+  expect(sitemap.includes(`<loc>${head.canonical}</loc>`) && sitemap.includes(`<loc>${head.canonical}about/</loc>`), 'sitemap lists the app and the about page');
 
   await page.fill('#search-input', 'Stuttgart');
   await page.waitForSelector('#suggestions li[role="option"]', { timeout: 5000 });
@@ -213,6 +237,7 @@ try {
   expect(/lat=48\.7765/.test(hash) && /cam=/.test(hash), 'URL hash holds coordinates and camera');
   expect(!/stuttgart/i.test(hash), 'URL hash holds no address text');
   expect(/Stuttgart/.test(await page.textContent('#place-title')), 'sheet shows the place name');
+  expect(/^Stuttgart.* in 3D · Your Place$/.test(await page.title()), `browser tab names the place (“${await page.title()}”)`);
   expect(/buildings/.test(await page.textContent('#describe')), 'text description lists buildings');
   await settle(page, 2200);
   await shot(page, '02-model-desktop');
@@ -374,16 +399,16 @@ try {
   const vp = await vctx.newPage();
   watchConsole(vp, 'village');
   await vp.goto(base);
-  await vp.fill('#search-input', '38312');
+  await vp.fill('#search-input', '84999');
   await vp.waitForSelector('#suggestions li[role="option"]');
   expect(/Postcode area/.test(await vp.textContent('#suggestions')), 'suggestions say what each result is ("Postcode area")');
   await vp.keyboard.press('ArrowDown');
   await vp.keyboard.press('Enter');
-  await vp.waitForFunction((d) => { const s = window.__yourPlace.state(); return s.center && Math.abs(s.center.lat - d.lat) < 1e-4; }, DORSTADT, { timeout: 30000 }).catch(() => undefined);
+  await vp.waitForFunction((d) => { const s = window.__yourPlace.state(); return s.center && Math.abs(s.center.lat - d.lat) < 1e-4; }, VILLAGE, { timeout: 30000 }).catch(() => undefined);
   await waitStage(vp, ['ready', 'error']);
   const vs = await vp.evaluate(() => window.__yourPlace.state());
-  expect(Math.abs(vs.center.lat - DORSTADT.lat) < 1e-4 && Math.abs(vs.center.lon - DORSTADT.lon) < 1e-4, 'a postcode search builds the model around its village, not the postcode area’s middle');
-  expect(/Dorstadt/.test(await vp.textContent('#place-title')) && /Postcode 38312/.test(await vp.textContent('#place-meta')), 'title names the village and keeps the postcode as context');
+  expect(Math.abs(vs.center.lat - VILLAGE.lat) < 1e-4 && Math.abs(vs.center.lon - VILLAGE.lon) < 1e-4, 'a postcode search builds the model around its village, not the postcode area’s middle');
+  expect(/Kleinfelde/.test(await vp.textContent('#place-title')) && /Postcode 84999/.test(await vp.textContent('#place-meta')), 'title names the village and keeps the postcode as context');
   expect((await vp.evaluate(() => window.__yourPlace.notice())) === null, 'no empty-square notice when there are buildings');
   await vp.close();
 
@@ -393,16 +418,16 @@ try {
   await waitStage(rp, ['ready', 'error']);
   await rp.waitForFunction(() => window.__yourPlace.notice(), null, { timeout: 20000 }).catch(() => undefined);
   const offer = await rp.evaluate(() => window.__yourPlace.notice());
-  expect(/^No buildings are mapped here\. Dorstadt \(village\) is \d\.\d km north-east\.$/.test(offer ?? ''), `an empty square offers the nearest village outside it (“${offer}”)`);
+  expect(/^No buildings are mapped here\. Kleinfelde \(village\) is \d\.\d km north-east\.$/.test(offer ?? ''), `an empty square offers the nearest village outside it (“${offer}”)`);
   expect(/No buildings are mapped in this square/.test(await rp.textContent('#describe')), 'the description says the square has no buildings');
   expect(/^Near /.test(await rp.textContent('#place-title')), `a link to open country is titled after the nearest village (“${await rp.textContent('#place-title')}”)`);
   await settle(rp, 1500);
   await shot(rp, '12-empty-square-offer');
   await rp.click('#notice-actions .btn-primary');
-  await rp.waitForFunction((d) => { const yp = window.__yourPlace; const s = yp.state(); return s.center && Math.abs(s.center.lat - d.lat) < 1e-4 && yp.stage === 'ready'; }, DORSTADT, { timeout: 60000 }).catch(() => undefined);
+  await rp.waitForFunction((d) => { const yp = window.__yourPlace; const s = yp.state(); return s.center && Math.abs(s.center.lat - d.lat) < 1e-4 && yp.stage === 'ready'; }, VILLAGE, { timeout: 60000 }).catch(() => undefined);
   const jumped = await rp.evaluate(() => ({ s: window.__yourPlace.state(), stats: window.__yourPlace.stats(), notice: window.__yourPlace.notice() }));
-  expect(Math.abs(jumped.s.center.lat - DORSTADT.lat) < 1e-4 && jumped.stats.buildings > 100 && jumped.notice === null, '“Go to Dorstadt” moves the model to the village');
-  expect(/Dorstadt/.test(await rp.textContent('#place-title')), 'title follows the jump');
+  expect(Math.abs(jumped.s.center.lat - VILLAGE.lat) < 1e-4 && jumped.stats.buildings > 100 && jumped.notice === null, '“Go to Kleinfelde” moves the model to the village');
+  expect(/Kleinfelde/.test(await rp.textContent('#place-title')), 'title follows the jump');
   await vctx.close();
 
   // ---------------- phone
@@ -442,6 +467,27 @@ try {
   await settle(mp, 400);
   await shot(mp, '10-sheet-phone');
   await phone.close();
+
+  // ---------------- the "How it works" page, on a phone
+  const aboutCtx = await browser.newContext({ ...devices['iPhone 13'] });
+  await routeAll(aboutCtx);
+  const ap = await aboutCtx.newPage();
+  watchConsole(ap, 'about');
+  const broken = [];
+  ap.on('response', (r) => { if (r.url().startsWith(base) && r.status() >= 400) broken.push(`${r.status()} ${r.url()}`); });
+  await ap.goto(`${base}about/`);
+  await ap.waitForLoadState('load');
+  expect(/How Your Place works/.test(await ap.title()), 'about page has its own title');
+  expect((await ap.locator('h1').count()) === 1 && (await ap.locator('h2').count()) >= 5, 'about page has one h1 and its sections');
+  expect(await ap.evaluate(() => document.querySelector('.shot img')?.naturalWidth > 0), 'about page screenshot loads');
+  expect(broken.length === 0, `about page loads its own files (${broken.join(', ') || 'no 404s'})`);
+  expect(await ap.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'about page: no horizontal overflow on a phone');
+  expect(/OpenStreetMap contributors/.test(await ap.textContent('body')), 'about page credits OpenStreetMap');
+  await shot(ap, '12-about-phone');
+  await ap.click('.top .btn');
+  await ap.waitForSelector('#welcome', { state: 'visible' });
+  expect(new URL(ap.url()).pathname === '/', '“Open the app” goes back to the app');
+  await aboutCtx.close();
 
   // ---------------- dark mode, reduced motion
   const dark = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark', reducedMotion: 'reduce' });

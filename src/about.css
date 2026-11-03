@@ -1,0 +1,234 @@
+/* The "How it works" page: plain, readable, same palette as the app. */
+:root {
+  --bg: #f4f1ec;
+  --surface: #fbfaf7;
+  --border: rgba(40, 33, 24, 0.12);
+  --text: #1e1c19;
+  --muted: #645e55;
+  --accent: #c8431a;
+  --accent-text: #b13a15; /* small accent text: 5.3:1 on the page background */
+  --accent-ink: #ffffff;
+  --gutter: 16px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #1c1b19;
+    --surface: #262420;
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f3f0ea;
+    --muted: #b1aa9f;
+    --accent: #ff7a4d;
+    --accent-text: #ff7a4d;
+    --accent-ink: #1b0f08;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #1c1b19;
+  --surface: #262420;
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #f3f0ea;
+  --muted: #b1aa9f;
+  --accent: #ff7a4d;
+  --accent-text: #ff7a4d;
+  --accent-ink: #1b0f08;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 14px var(--gutter);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 15px;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-primary:hover {
+  color: var(--accent-ink);
+  filter: brightness(1.06);
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 var(--gutter) 40px;
+}
+
+section {
+  margin-top: 44px;
+}
+
+.hero {
+  margin-top: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+h1,
+h2 {
+  font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+h1 {
+  margin: 0 0 14px;
+  font-size: clamp(30px, 6vw, 44px);
+  line-height: 1.1;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 27px;
+  line-height: 1.2;
+}
+
+h3 {
+  margin: 22px 0 6px;
+  font-size: 17px;
+}
+
+p,
+li {
+  text-wrap: pretty;
+}
+
+.lede {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+ul,
+ol {
+  padding-left: 1.3em;
+}
+
+li + li {
+  margin-top: 6px;
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface);
+  font-size: 0.92em;
+}
+
+.shot {
+  margin: 28px 0 0;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 18px 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+caption {
+  margin-bottom: 8px;
+  text-align: left;
+  color: var(--muted);
+}
+
+th,
+td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+thead th {
+  font-weight: 600;
+}
+
+.foot {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px var(--gutter) 40px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14px;
+}

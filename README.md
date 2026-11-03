@@ -1,50 +1,59 @@
-# Your Place — 3D city topography model
+# Your Place
 
-Type an address, get a tilt-and-orbit miniature of the surrounding 1, 2 or 4 km: the real terrain
-underneath, every mapped building extruded on top, roads, water and green areas draped over the
-ground. It looks like a physical architectural model — matte, soft shadows, a plinth whose side
-walls show the terrain cross-section.
+**Type any address and get the area around it as a 3D architect’s model: the real terrain underneath,
+every building standing on top. Save a poster or a watertight STL to 3D print it. Free, no account,
+works on your phone.**
 
-This is the MVP of the spec "Your Place: 3D City Topography Model" (Claude Docs), built as a
-mobile-first TypeScript web app on three.js.
+**[Open Your Place →](https://adam2kg.github.io/3d-city/)** · [How it works](https://adam2kg.github.io/3d-city/about/) · [Changelog](CHANGELOG.md)
+
+<p>
+  <img src="public/screenshot.jpg" alt="Your Place showing Stuttgart as a 3D model on its valley terrain, with the settings panel open" width="73%" />
+  <img src="public/screenshot-phone.jpg" alt="Your Place on a phone, showing Lisbon’s hills and the river Tagus" width="24%" />
+</p>
+
+## What you can do
+
+- **Search anything:** an address, a street, a village, a postcode or `lat, lon`, or use your location.
+  Postcode and county results land on their village, not in a field.
+- **See it in 3D:** the 1, 2 or 4 km around it, with terrain you can exaggerate (1×–5×) and contour lines.
+  Buildings stand at their mapped height; where none is mapped the app estimates it and says how many.
+- **Find a house:** slide the plate, tap a building to pin it, and “Centre here” to rebuild the square around it.
+- **Share it:** the link opens the same view with the same house pinned. It holds coordinates only, never the address you typed.
+- **Keep it:** download a poster image with the place name and coordinates, or an STL file to 3D print
+  (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300). Every exported shell is checked to be watertight.
+
+## Controls
+
+| | Touch | Mouse | Keyboard (model focused) |
+| --- | --- | --- | --- |
+| Turn and tilt | one finger | drag | arrow keys |
+| Slide | two fingers | right-drag or Shift-drag | Shift + arrow keys |
+| Zoom | pinch | wheel | + / − |
+| Move the pin | tap a building or the ground | click | — |
+| North up / reset | compass / reset buttons | | N / 0 |
+
+## Run it yourself
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # static site in dist/ — host it anywhere (relative paths)
 npm test           # unit tests (vitest)
-npm run e2e        # build + headless-browser smoke test (needs Playwright), screenshots in e2e/out/
+npm run e2e        # build + headless-browser test (needs Playwright), screenshots in e2e/out/
 ```
 
-## Live site and deploys
+It is a static TypeScript app on three.js with no server and no API keys: the browser fetches map
+tiles, terrain and address search straight from free public services.
 
-**https://adam2kg.github.io/3d-city/**
+**Deploys.** `.github/workflows/pages.yml` runs the unit tests, builds, and publishes `dist/` to
+GitHub Pages on every push to `main`. One-time setup: **Settings → Pages → Build and deployment →
+Source: GitHub Actions**. Pushing a version tag (`git tag v1.0.0 && git push origin v1.0.0`)
+publishes a GitHub release with that version’s notes from [CHANGELOG.md](CHANGELOG.md).
 
-`.github/workflows/pages.yml` runs the unit tests, builds, and publishes `dist/` to GitHub Pages on
-every push to `main` (or manually from the Actions tab). One-time setup: **Settings → Pages →
-Build and deployment → Source: GitHub Actions**.
-
-## What's in the MVP
-
-| Spec feature | Status |
-| --- | --- |
-| Address search with autocomplete, "use my location", raw `lat, lon` input | ✅ |
-| Villages and postcodes: postcode areas resolve to their village; a (nearly) empty square offers the nearest village or town | ✅ |
-| 3D terrain mesh, 1×–5× vertical exaggeration | ✅ |
-| Extruded buildings: OSM `height` → `building:levels` × 3 m → neighbourhood median, estimated heights flagged | ✅ (no LiDAR step yet) |
-| Roads, water, parks as colour-coded, toggleable layers | ✅ |
-| Orbit / tilt (0–70°) / zoom / slide with touch, mouse and keyboard; compass resets north | ✅ |
-| Pin a house: tap or click a building to move the pin onto it (marked in the accent colour); share links carry it; "Centre here" rebuilds the square around it | ✅ |
-| Share link with the camera in the URL (coordinates only, never the typed address) | ✅ |
-| PNG poster export with title, coordinates and attribution | ✅ |
-| 3D print file: watertight binary STL in millimetres, 10 / 15 / 20 cm wide, terrain exaggeration as on screen | ✅ |
-| Contour lines, interval auto-scaled to relief (5 / 10 / 20 m) | ✅ (v1.1 in the spec, cheap to include) |
-| Area size 1 / 2 / 4 km, white-block or height-colour buildings | ✅ |
-| Progressive loading: terrain → buildings → roads/water/vegetation, with retry | ✅ |
-| Accessibility: keyboard camera, text description of the area, reduced motion, colour-blind-safe ramp | ✅ |
-| Installable PWA (manifest + app-shell service worker), WebGL 2 check | ✅ |
-| Elevation profile, poster PDF (A3/A2), multi-colour 3MF, imagery drape, compare, time slider | ⏳ later phases |
-| Coloured or painted buildings, photos on buildings | ⏳ later (see "Ideas for later") |
+**Own domain.** Point a DNS `CNAME` record (e.g. `3d.example.com`) at `adam2kg.github.io`, enter the
+domain under **Settings → Pages → Custom domain**, and change `SITE_URL` in `vite.config.ts` (or set
+the `SITE_URL` environment variable in the build) so canonical links, preview images and the sitemap
+use it.
 
 ## How it works
 
@@ -78,8 +87,8 @@ Design notes:
 - **Rural searches land on the village, not in a field.** Geocoders place a postcode or
   administrative area at the middle of its area — for rural postcodes that is open country between
   villages. Such results are resolved to the settlement the geocoder names for them, and a square
-  with fewer than 10 buildings offers the nearest village or town outside it ("Dorstadt is 2.0 km
-  north-east — Go to Dorstadt").
+  with fewer than 10 buildings offers the nearest village or town outside it ("Kleinfelde is 2.0 km
+  north-east — Go to Kleinfelde").
 - **The print is a union of closed shells.** The STL holds a terrain block (height grid on top,
   side walls, flat base) and one closed prism per building that starts inside the block. Slicers
   union overlapping shells, so a building on a slope is exactly "the part above ground" without any
@@ -97,15 +106,47 @@ Design notes:
   and outward-facing; one Barcelona building was left out.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
-## Controls
+## Technical choices
 
-| | Touch | Mouse | Keyboard (model focused) |
-| --- | --- | --- | --- |
-| Turn and tilt | one finger | drag | arrow keys |
-| Slide | two fingers | right-drag or Shift-drag | Shift + arrow keys |
-| Zoom | pinch | wheel | + / − |
-| Move the pin | tap a building or the ground | click | — |
-| North up / reset | compass / reset buttons | | N / 0 |
+- **Renderer:** three.js, not MapLibre — the physical-model look (plinth walls, contact shadow,
+  poster renders, STL export) needs full control of the geometry.
+- **No server:** the browser fetches public services directly, behind small interfaces
+  (`loadHeightGrid`, the tile loader, `overpass`, `suggest`) that an own tile server or geocoder could
+  replace if traffic outgrows the free services.
+- **Elevation:** Mapzen/AWS Terrarium tiles (worldwide, CORS, no key; ~10–30 m sources incl.
+  SRTM, EU-DEM, 3DEP) instead of Copernicus GLO-30 GeoTIFFs, which need server-side processing.
+- **Search engines:** the app page and a static “How it works” page (`about/`) carry titles,
+  descriptions, canonical links, Open Graph images and structured data; the build writes
+  `sitemap.xml` and `robots.txt` from `SITE_URL`.
+
+## Data and licences
+
+- Map data © OpenStreetMap contributors, ODbL. Attribution is shown in the app, on posters and in
+  the STL file header; please keep “© OpenStreetMap contributors” next to anything you share.
+- Vector tiles: [OpenFreeMap](https://openfreemap.org), schema © [OpenMapTiles](https://openmaptiles.org).
+  Fallback map data: the [Overpass API](https://overpass-api.de).
+- Terrain: Mapzen terrain tiles on AWS Open Data — see the
+  [attribution list](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
+- Address search: [Photon](https://photon.komoot.io) by komoot (suggestions, place names for shared
+  links) and [Nominatim](https://nominatim.org) (only when you press Enter before suggestions arrive,
+  per its usage policy).
+- Photon, Nominatim and Overpass are shared community services with fair-use limits. If the app gets
+  very popular, the address search should move to an own or paid geocoder.
+
+## Privacy
+
+No account, no cookies, no analytics, no server of its own. What you type in the search box goes from
+your browser to Photon or Nominatim; share links hold only coordinates and the view; map data you
+loaded is cached on your device.
+
+## Known limitations
+
+- No LiDAR surface model yet, so many heights are estimates (the app says how many).
+- Building parts follow Simple 3D Buildings only partly: roofs are flat, outlines hosting
+  `building:part`s are dropped.
+- Terrain sea-floor values are clamped at −30 m until coastlines arrive; places far below sea level
+  (Dead Sea, Death Valley) are flattened by that clamp.
+- No level of detail yet; the 4 km area at full density can be heavy on older phones.
 
 ## Ideas for later
 
@@ -117,35 +158,6 @@ Design notes:
   bigger job (coverage, licensing, matching photos to walls).
 - **Multi-colour 3MF** (terrain, buildings, roads and water as separate parts for AMS-style printers),
   a name engraved in the base, and **poster styles** (title layouts, colours).
-
-## Decisions against the spec's open questions
-
-- **Renderer:** three.js, not MapLibre — the physical-model look (plinth walls, contact shadow,
-  poster renders, later STL export) needs full control of the geometry.
-- **Data path:** the spec's production design builds tiles on a server and serves them from a CDN.
-  This prototype fetches public APIs straight from the browser, behind small interfaces
-  (`loadHeightGrid`, `overpass`, `suggest`) that a tile server can replace.
-- **Elevation:** Mapzen/AWS Terrarium tiles (worldwide, CORS, no key; ~10–30 m sources incl.
-  SRTM, EU-DEM, 3DEP) instead of Copernicus GLO-30 GeoTIFFs, which need server-side processing.
-
-## Data and licences
-
-- Map data © OpenStreetMap contributors, ODbL — attribution is shown in the app and on posters.
-- Terrain: Mapzen terrain tiles on AWS Open Data — see the
-  [attribution list](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
-- Geocoding: [Photon](https://photon.komoot.io) (type-ahead) and
-  [Nominatim](https://nominatim.org) (single lookups only, per its usage policy).
-- Public Overpass, Photon and Nominatim instances are shared community services with rate limits.
-  Fine for a prototype; production should use the planned tile server and a paid geocoder.
-
-## Known limitations
-
-- No LiDAR surface model yet, so many heights are estimates (the app says how many).
-- Building parts follow Simple 3D Buildings only partly: roofs are flat, outlines hosting
-  `building:part`s are dropped.
-- Terrain sea-floor values are clamped at −30 m until coastlines arrive; places far below sea level
-  (Dead Sea, Death Valley) are flattened by that clamp.
-- No level of detail yet; the 4 km area at full density can be heavy on older phones.
 
 ## Testing
 
@@ -164,4 +176,4 @@ viewport, and dark mode with reduced motion. It fails on any console error.
 ## Licence
 
 The code is released under the [MIT Licence](LICENSE). Map data and terrain shown by the app keep
-their own licences (see "Data and licences" above).
+their own licences (see “Data and licences” above).

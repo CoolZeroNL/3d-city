@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>How Your Place works · 3D city models and 3D-print maps of any address</title>
+    <meta name="description" content="How to make a 3D model of your neighbourhood from any address, save it as a poster, or 3D print it from an STL file. Scales, print tips, privacy and data sources." />
+    <link rel="canonical" href="%SITE_URL%about/" />
+    <meta name="theme-color" content="#ebe7df" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="../icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="../icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Your Place" />
+    <meta property="og:title" content="How Your Place works: 3D models and 3D-print maps of any address" />
+    <meta property="og:description" content="Scales, print tips, privacy and data sources for Your Place, the free 3D city model maker." />
+    <meta property="og:url" content="%SITE_URL%about/" />
+    <meta property="og:image" content="%SITE_URL%og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="/src/about.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="../"><img src="../icon.svg" alt="" width="28" height="28" />Your Place</a>
+      <a class="btn" href="../">Open the app</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">How it works</p>
+        <h1>Your neighbourhood as a 3D model, a poster or a 3D print</h1>
+        <p class="lede">
+          Type any address and Your Place builds a miniature of the 1, 2 or 4 km around it in your browser within a few seconds:
+          the real terrain underneath and every mapped building standing on top, like an architect’s model.
+          It’s free, needs no account and works on a phone.
+        </p>
+        <p><a class="btn btn-primary" href="../">Make a model of your place</a></p>
+        <figure class="shot">
+          <img src="../screenshot.jpg" width="1600" height="1000" alt="Your Place showing Stuttgart as a 3D model with its valley terrain, with the settings panel open" />
+        </figure>
+      </section>
+
+      <section>
+        <h2>Three steps</h2>
+        <ol class="steps">
+          <li>
+            <strong>Search a place.</strong> An address, a street, a village, a postcode or raw coordinates such as
+            <code>48.7765, 9.1772</code>. Or tap “use my location”.
+          </li>
+          <li>
+            <strong>Look around.</strong> Drag to turn and tilt, pinch or scroll to zoom, two fingers (or Shift-drag) to slide.
+            Tap a building to put the pin on it, “this one is ours”.
+          </li>
+          <li>
+            <strong>Keep it.</strong> Share a link that opens the same view with the same house pinned, download a poster
+            image, or download an STL file to 3D print.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>What’s in the model</h2>
+        <ul>
+          <li><strong>Terrain</strong> from open elevation data. Hills can be exaggerated from 1× to 5× and drawn with contour lines.</li>
+          <li><strong>Buildings</strong> at the height recorded in OpenStreetMap, or its number of floors × 3 m. Where neither is mapped,
+            the height is estimated from the neighbourhood, and the app says what share of buildings that is.</li>
+          <li><strong>Roads, water and green areas</strong> painted on the ground, each of which you can switch off.</li>
+          <li><strong>Sea</strong> drawn from OpenStreetMap’s coastline, so harbours and bays sit at sea level.</li>
+        </ul>
+      </section>
+
+      <section id="3d-print">
+        <h2>3D printing your place</h2>
+        <p>
+          Open the share menu, pick a print size and download the STL. The file is a single solid in millimetres:
+          the terrain as a block on a 3 mm base, with every building standing on it. It is checked to be watertight,
+          so slicers such as PrusaSlicer, Bambu Studio, OrcaSlicer and Cura shouldn’t need to repair it.
+          North is at the back of the print.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <caption>Scale, and the printed height of a 10 m building</caption>
+            <thead>
+              <tr><th scope="col">Area</th><th scope="col">10 cm print</th><th scope="col">15 cm print</th><th scope="col">20 cm print</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">1 km</th><td>1:10,000 · 1 mm</td><td>1:6,670 · 1.5 mm</td><td>1:5,000 · 2 mm</td></tr>
+              <tr><th scope="row">2 km</th><td>1:20,000 · 0.5 mm</td><td>1:13,300 · 0.75 mm</td><td>1:10,000 · 1 mm</td></tr>
+              <tr><th scope="row">4 km</th><td>1:40,000 · 0.25 mm</td><td>1:26,700 · 0.4 mm</td><td>1:20,000 · 0.5 mm</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Tips</h3>
+        <ul>
+          <li><strong>Choose a small area for a big print.</strong> Houses are tiny at true scale; 1 or 2 km on 15–20 cm shows streets and houses best.</li>
+          <li><strong>Exaggerate the terrain</strong> before you export: the print uses the same setting as the screen. 2–3× makes gentle hills readable.</li>
+          <li><strong>No supports needed.</strong> The model sits flat on its base. A 0.4 mm nozzle and 0.12–0.16 mm layers keep small buildings crisp.</li>
+          <li><strong>Large areas make large files.</strong> A 2 km city centre is about 10–15 MB, a 4 km one up to about 40 MB.</li>
+          <li>If a building’s outline in the map data is broken beyond repair, it is left out and the app tells you how many.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Privacy</h2>
+        <ul>
+          <li>No account, no cookies, no analytics. Your Place has no server of its own: the app runs in your browser.</li>
+          <li>What you type in the search box goes from your browser to the address search services
+            <a href="https://photon.komoot.io/">Photon</a> (by komoot) and, if needed,
+            <a href="https://nominatim.openstreetmap.org/">Nominatim</a> (OpenStreetMap), which return its coordinates.</li>
+          <li>Share links hold only coordinates and the view, never the address you typed. A shared model is named after its neighbourhood, not a street address.</li>
+          <li>Map data you have loaded is cached on your device so it opens faster next time.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Questions</h2>
+        <h3>My house is missing, or flat</h3>
+        <p>
+          Buildings come from <a href="https://www.openstreetmap.org/">OpenStreetMap</a>, which volunteers map by hand.
+          Cities are well covered; some villages have few buildings, and many have no height recorded.
+          You can add your house, or its number of floors, yourself on openstreetmap.org, and it shows up here once the map tiles update.
+        </p>
+        <h3>Which devices work?</h3>
+        <p>Any current browser with WebGL 2: Safari, Chrome, Firefox or Edge, on a phone, tablet or computer. You can also install it as an app from the browser menu.</p>
+        <h3>Can I share what I make?</h3>
+        <p>
+          Yes. The map data is © OpenStreetMap contributors under the Open Database Licence, so credit
+          “© OpenStreetMap contributors” wherever you show a model, poster or print. Posters carry the credit already.
+        </p>
+      </section>
+
+      <section>
+        <h2>Data sources and credits</h2>
+        <ul class="credits">
+          <li>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL</li>
+          <li>Vector map tiles: <a href="https://openfreemap.org/">OpenFreeMap</a>, schema <a href="https://www.openmaptiles.org/">© OpenMapTiles</a></li>
+          <li>Terrain: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md">Mapzen terrain tiles</a> on AWS Open Data</li>
+          <li>Address search: <a href="https://photon.komoot.io/">Photon</a> by komoot, <a href="https://nominatim.org/">Nominatim</a></li>
+          <li>Fallback map data: <a href="https://overpass-api.de/">Overpass API</a></li>
+        </ul>
+        <p>
+          Your Place is open source under the MIT licence:
+          <a href="https://github.com/Adam2kg/3d-city">github.com/Adam2kg/3d-city</a>. Ideas and bug reports are welcome there.
+        </p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <a href="../">Open Your Place</a> · <a href="https://github.com/Adam2kg/3d-city">Source code</a> · © OpenStreetMap contributors
+    </footer>
+  </body>
+</html>

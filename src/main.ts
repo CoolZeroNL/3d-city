@@ -28,6 +28,8 @@ const PRESETS: Array<{ name: string; detail: string; center: LngLat; size: AreaS
 // ------------------------------------------------------------------ state
 
 const app = $('app');
+/** the landing page's title; a loaded place puts its name in the tab instead */
+const HOME_TITLE = document.title;
 let state: ViewState = decodeState(location.hash);
 let model: CityModel | null = null;
 let placeLabel = '';
@@ -441,11 +443,14 @@ function locate(): void {
 
 function setMode(mode: 'landing' | 'model'): void {
   app.dataset.mode = mode;
+  if (mode === 'landing') document.title = HOME_TITLE;
   updateInsets();
 }
 
 function setPlaceTitle(title: string, detail: string): void {
   $('place-title').textContent = title;
+  // tabs, history and bookmarks name the place
+  document.title = `${title} in 3D · Your Place`;
   placeMetaDetail = detail;
   updateMeta();
 }

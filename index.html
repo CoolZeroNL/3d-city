@@ -3,13 +3,59 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Your Place</title>
-    <meta name="description" content="Turn any address into a 3D miniature of the surrounding city, with the real terrain underneath." />
+    <title>Your Place · 3D city model of any address, free STL export</title>
+    <meta name="description" content="Type any address and see the area around it as a 3D model with real terrain and building heights. Free, no sign-up. Save a poster or an STL to 3D print." />
+    <link rel="canonical" href="%SITE_URL%" />
     <meta name="theme-color" content="#ebe7df" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Your Place" />
+    <meta property="og:title" content="Your Place · your neighbourhood as a 3D model" />
+    <meta property="og:description" content="Type any address and get a 3D model of the area around it, with real terrain and buildings. Free, no account. Save a poster or an STL for 3D printing." />
+    <meta property="og:url" content="%SITE_URL%" />
+    <meta property="og:image" content="%SITE_URL%og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A 3D model of a city on its real terrain, made with Your Place" />
+    <meta property="og:locale" content="en_GB" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Your Place · your neighbourhood as a 3D model" />
+    <meta name="twitter:description" content="Type any address and get a 3D model of the area around it, with real terrain and buildings. Free, no account, works on your phone." />
+    <meta name="twitter:image" content="%SITE_URL%og.jpg" />
+    <meta name="twitter:image:alt" content="A 3D model of a city on its real terrain, made with Your Place" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Your Place",
+        "url": "%SITE_URL%",
+        "description": "Turn any address into a 3D miniature of the surrounding city, with the real terrain underneath. Download a poster or a watertight STL file for 3D printing.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires a browser with WebGL 2",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "image": "%SITE_URL%og.jpg",
+        "screenshot": "%SITE_URL%og.jpg",
+        "featureList": [
+          "3D model of the 1, 2 or 4 km around any address",
+          "Real terrain with adjustable exaggeration and contour lines",
+          "Buildings at their mapped height",
+          "Pin a house and share a link to it",
+          "Poster image download",
+          "Watertight STL file for 3D printing"
+        ],
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/Adam2kg/3d-city",
+        "author": { "@type": "Person", "name": "Adam2kg", "url": "https://github.com/Adam2kg" }
+      }
+    </script>
   </head>
   <body>
     <div class="app" id="app" data-mode="landing">
@@ -59,6 +105,7 @@
         <p class="lede">Search an address to build a miniature of the area around it: the real terrain underneath, every building standing on top.</p>
         <p class="presets-label">Or start with a place with interesting terrain</p>
         <div class="presets" id="presets"></div>
+        <p class="welcome-more"><a href="./about/">How it works, 3D printing tips and data sources</a></p>
       </section>
 
       <div class="fabs" id="fabs">
@@ -134,13 +181,15 @@
             <p id="gesture-hint" class="gesture-hint"></p>
             <p id="describe" class="describe"></p>
             <p id="estimate-note" class="estimate-note" hidden></p>
-            <p class="attr">Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen, AWS Terrain Tiles.</p>
+            <p class="attr">Map data © OpenStreetMap contributors (ODbL), map tiles © OpenMapTiles via OpenFreeMap. Terrain: Mapzen, AWS Terrain Tiles.</p>
           </div>
         </div>
       </aside>
 
       <footer class="attribution">
         © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ·
+        <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> ·
+        <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> ·
         Terrain: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Mapzen, AWS Terrain Tiles</a>
       </footer>
 
@@ -182,6 +231,10 @@
         <p>Your Place needs WebGL 2. Try a current version of Safari, Chrome, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
       </div>
     </div>
+    <noscript>
+      <p class="noscript">Your Place builds a 3D model of any address in your browser and needs JavaScript and WebGL 2.
+        <a href="./about/">Read how it works</a>.</p>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

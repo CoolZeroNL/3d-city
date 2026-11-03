@@ -409,12 +409,15 @@ function emitPrism(t: Triangles, fp: Footprint, flat: number[], tris: number[], 
   }
 }
 
+export const STL_CREDIT = ' | (c) OpenStreetMap contributors';
+
 /** Binary STL: 80-byte header, triangle count, then normal + 3 vertices + 2 spare bytes per triangle. */
 export function toBinaryStl(t: Triangles, header: string): ArrayBuffer {
   const buf = new ArrayBuffer(84 + 50 * t.count);
   const dv = new DataView(buf);
-  // ASCII only, and never starting with "solid" (that marks text STL to some readers)
-  const text = `Your Place: ${header}`.replace(/[^\x20-\x7e]/g, '?').slice(0, 80);
+  // ASCII only, and never starting with "solid" (that marks text STL to some readers).
+  // The map data credit (ODbL) goes last and is never cut off.
+  const text = `Your Place: ${header}`.replace(/[^\x20-\x7e]/g, '?').slice(0, 80 - STL_CREDIT.length) + STL_CREDIT;
   for (let i = 0; i < text.length; i++) dv.setUint8(i, text.charCodeAt(i));
   dv.setUint32(80, t.count, true);
   const d = t.data;

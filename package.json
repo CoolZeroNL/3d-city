@@ -1,8 +1,23 @@
 {
   "name": "your-place",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Your Place — turn any address into a 3D miniature of the surrounding city on real terrain.",
+  "homepage": "https://adam2kg.github.io/3d-city/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Adam2kg/3d-city.git"
+  },
+  "bugs": "https://github.com/Adam2kg/3d-city/issues",
+  "keywords": [
+    "3d-map",
+    "city-model",
+    "terrain",
+    "openstreetmap",
+    "stl",
+    "3d-printing",
+    "three.js"
+  ],
   "license": "MIT",
   "type": "module",
   "scripts": {

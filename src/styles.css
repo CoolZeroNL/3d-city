@@ -9,6 +9,7 @@
   --muted: #645e55;
   --faint: #8f887d;
   --accent: #c8431a;
+  --accent-text: #b13a15; /* small accent text, ≥ 4.5:1 on the light background */
   --accent-ink: #ffffff;
   --ok: #3d7a4f;
   --warn: #a5561a;
@@ -33,6 +34,7 @@
     --muted: #b1aa9f;
     --faint: #857f75;
     --accent: #ff7a4d;
+    --accent-text: #ff7a4d;
     --accent-ink: #1b0f08;
     --ok: #79c08f;
     --warn: #f0a467;
@@ -52,6 +54,7 @@
   --muted: #b1aa9f;
   --faint: #857f75;
   --accent: #ff7a4d;
+  --accent-text: #ff7a4d;
   --accent-ink: #1b0f08;
   --ok: #79c08f;
   --warn: #f0a467;
@@ -412,7 +415,7 @@ a {
   font-weight: 650;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .welcome h1 {
@@ -437,6 +440,27 @@ a {
   margin: 0 0 10px;
   font-size: 13px;
   color: var(--faint);
+}
+
+.welcome-more {
+  margin: 18px 0 0;
+  font-size: 13px;
+}
+
+.welcome-more a {
+  color: var(--muted);
+  text-underline-offset: 3px;
+}
+
+.welcome-more a:hover {
+  color: var(--text);
+}
+
+.noscript {
+  position: fixed;
+  inset: auto var(--gutter) 40% var(--gutter);
+  text-align: center;
+  font-size: 16px;
 }
 
 .presets {
