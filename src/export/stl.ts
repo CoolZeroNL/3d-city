@@ -11,7 +11,8 @@
  * Bambu Studio, OrcaSlicer, Cura) need no repairs.
  */
 
-import earcut from 'earcut';
+import earcut, { deviation } from 'earcut';
+import polygonClipping from 'polygon-clipping';
 import { signedArea, type Polygon } from '../geo/polygon';
 import type { HeightGrid } from '../geo/terrain';
 
@@ -89,7 +90,7 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
   buildings.forEach((b, i) => {
     // vary inset and floor depth per building, so no two shells share a point even when
     // their outlines are identical (an outline and its building part)
-    addPrism(t, b.poly, b.top * s, bottom - gap * 3 * (i % 97), s, gap * (1 + 0.4 * (i % 5)));
+    addPrism(t, b.poly, b.top * s, bottom - gap * 0.3 * (i % 97), s, gap * (1 + 0.4 * (i % 5)));
   });
   return t;
 }
@@ -190,34 +191,122 @@ export function insetRing(r: P2[], d: number): P2[] {
   });
 }
 
-/** A closed prism: walls, roof and floor. `inset` (mm) keeps it from touching its neighbours. */
-function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s: number, inset: number): void {
-  if (topZ <= bottomZ) return;
-  // rings in mm, cleaned, with the solid on the left (outer anticlockwise, holes clockwise —
-  // checked, not trusted), then moved slightly into the solid
-  const prep = (ring: Polygon['outer'], outer: boolean): P2[] | null => {
-    let r = cleanRing(ring.map(([e, nn]) => [e * s, nn * s] as P2));
-    if (r.length < 3) return null;
-    const area = signedArea(r);
-    if (outer !== area > 0) r.reverse();
-    r = cleanRing(insetRing(r, inset));
+/** A footprint in mm with the solid left of every edge: outer anticlockwise, holes clockwise. */
+interface Footprint {
+  outer: P2[];
+  holes: P2[][];
+}
+
+/**
+ * A building outline as valid footprints in mm: scaled and cleaned; repaired if it
+ * crosses itself; oriented (checked, not trusted); then moved slightly into the solid.
+ */
+function footprints(poly: Polygon, s: number, inset: number): Footprint[] {
+  const scale = (ring: Polygon['outer']) => cleanRing(ring.map(([e, nn]) => [e * s, nn * s] as P2));
+  const outer = scale(poly.outer);
+  if (outer.length < 3) return [];
+  const holes = poly.holes.map(scale).filter((h) => h.length >= 3);
+  const raw = { outer, holes };
+  const valid = [outer, ...holes].every(isSimple) ? [orient(raw)] : repair(raw);
+  return valid.map((fp) => insetFootprint(fp, inset)).filter((fp): fp is Footprint => !!fp);
+}
+
+function orient(fp: Footprint): Footprint {
+  const outer = signedArea(fp.outer) > 0 ? fp.outer : fp.outer.slice().reverse();
+  return { outer, holes: fp.holes.map((h) => (signedArea(h) < 0 ? h : h.slice().reverse())) };
+}
+
+function insetFootprint(fp: Footprint, d: number): Footprint | null {
+  const shrink = (r: P2[], sign: number): P2[] | null => {
+    const out = cleanRing(insetRing(r, d));
     // too small to survive the inset (it turned inside out): drop it
-    if (r.length < 3 || Math.sign(signedArea(r)) !== (outer ? 1 : -1)) return null;
-    return r;
+    return out.length >= 3 && Math.sign(signedArea(out)) === sign ? out : null;
   };
-  const outer = prep(poly.outer, true);
-  if (!outer) return;
-  const rings = [outer, ...poly.holes.map((h) => prep(h, false)).filter((r): r is P2[] => !!r)];
+  const outer = shrink(fp.outer, 1);
+  if (!outer) return null;
+  return { outer, holes: fp.holes.map((h) => shrink(h, -1)).filter((h): h is P2[] => !!h) };
+}
+
+/** Roof triangles if the footprint is valid (simple rings, fully triangulated), else null. */
+function triangulate(fp: Footprint): { flat: number[]; tris: number[] } | null {
+  const rings = [fp.outer, ...fp.holes];
+  if (!rings.every(isSimple)) return null;
   const flat: number[] = [];
   const holeIdx: number[] = [];
   for (const ring of rings) {
     if (flat.length) holeIdx.push(flat.length / 2);
     for (const [x, y] of ring) flat.push(x, y);
   }
-  const at = (k: number, z: number): V => [flat[k * 2], flat[k * 2 + 1], z];
+  const holes = holeIdx.length ? holeIdx : undefined;
+  const tris = earcut(flat, holes, 2);
+  // earcut gives up quietly on broken input: check that the triangles cover the area
+  if (!tris.length || deviation(flat, holes ?? null, 2, tris) > 1e-6) return null;
+  return { flat, tris };
+}
 
+/** No two non-neighbouring edges of the ring touch or cross. */
+export function isSimple(r: P2[]): boolean {
+  const m = r.length;
+  const orient = (a: P2, b: P2, c: P2) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  for (let i = 0; i < m; i++) {
+    const a = r[i];
+    const b = r[(i + 1) % m];
+    for (let j = i + 2; j < m; j++) {
+      if (i === 0 && j === m - 1) continue; // the edge closing the ring meets the first edge
+      const c = r[j];
+      const d = r[(j + 1) % m];
+      if (Math.max(c[0], d[0]) < Math.min(a[0], b[0]) || Math.min(c[0], d[0]) > Math.max(a[0], b[0])) continue;
+      if (Math.max(c[1], d[1]) < Math.min(a[1], b[1]) || Math.min(c[1], d[1]) > Math.max(a[1], b[1])) continue;
+      const o1 = orient(a, b, c);
+      const o2 = orient(a, b, d);
+      const o3 = orient(c, d, a);
+      const o4 = orient(c, d, b);
+      if (o1 !== o2 && o3 !== o4) return false; // crossing (or touching at an end)
+      if (o1 === 0 && o2 === 0) return false; // overlapping on one line (bounding boxes overlap)
+    }
+  }
+  return true;
+}
+
+/** Make a self-intersecting footprint valid: its union with itself, as simple polygons. */
+function repair(fp: Footprint): Footprint[] {
+  try {
+    const out = polygonClipping.union([[...fp.outer, fp.outer[0]], ...fp.holes.map((h) => [...h, h[0]])]);
+    return out
+      .map(([outer, ...holes]) => {
+        const o = cleanRing(outer.slice(0, -1) as P2[]);
+        if (signedArea(o) < 0) o.reverse();
+        const hs = holes.map((h) => cleanRing(h.slice(0, -1) as P2[])).filter((h) => h.length >= 3);
+        for (const h of hs) if (signedArea(h) > 0) h.reverse();
+        return { outer: o, holes: hs };
+      })
+      .filter((f) => f.outer.length >= 3);
+  } catch {
+    return [];
+  }
+}
+
+/** A closed prism: walls, roof and floor. `inset` (mm) keeps it from touching its neighbours. */
+function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s: number, inset: number): void {
+  if (topZ <= bottomZ) return;
+  for (const fp of footprints(poly, s, inset)) {
+    const done = triangulate(fp);
+    if (done) {
+      emitPrism(t, fp, done.flat, done.tris, topZ, bottomZ);
+      continue;
+    }
+    // the inset closed a narrow notch, or earcut gave up: repair once more, else leave it out
+    for (const fixed of repair(fp)) {
+      const ok = triangulate(fixed);
+      if (ok) emitPrism(t, fixed, ok.flat, ok.tris, topZ, bottomZ);
+    }
+  }
+}
+
+function emitPrism(t: Triangles, fp: Footprint, flat: number[], tris: number[], topZ: number, bottomZ: number): void {
+  const at = (k: number, z: number): V => [flat[k * 2], flat[k * 2 + 1], z];
   let k0 = 0;
-  for (const ring of rings) {
+  for (const ring of [fp.outer, ...fp.holes]) {
     const m = ring.length;
     for (let k = 0; k < m; k++) {
       const a = k0 + k;
@@ -231,7 +320,6 @@ function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s:
     }
     k0 += m;
   }
-  const tris = earcut(flat, holeIdx.length ? holeIdx : undefined, 2);
   for (let k = 0; k < tris.length; k += 3) {
     const [p, q, r] = [tris[k], tris[k + 1], tris[k + 2]];
     t.add(at(p, topZ), at(q, topZ), at(r, topZ), UP);

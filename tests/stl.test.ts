@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrint, cleanRing, insetRing, printScale, toBinaryStl, Triangles } from '../src/export/stl';
+import { buildPrint, cleanRing, insetRing, isSimple, printScale, toBinaryStl, Triangles } from '../src/export/stl';
 import { clipBuildingToRect } from '../src/geo/clip';
 import { clipPolygonToRect, signedArea } from '../src/geo/polygon';
 import { withOrientation, type Polygon } from '../src/geo/polygon';
@@ -131,6 +131,18 @@ describe('3D print (STL)', () => {
     // the default gap is far below what a printer resolves
     const v = volume(t) - 100 * 100 * 3;
     expect(v).toBeGreaterThan(4 * 100 * 9.5 * 0.97);
+  });
+
+  it('repairs outlines that cross themselves instead of leaving holes in the print', () => {
+    const flat = grid(3, 100, () => 0);
+    // a bow tie: the outline crosses itself in the middle
+    const bowTie: Polygon = { outer: [[0, 0], [10, 10], [10, 0], [0, 10]], holes: [] };
+    // repaired into two triangles of 25 mm² that touch at a point; the shell gap parts them
+    const t = buildPrint(flat, [{ poly: bowTie, top: 5 }], { ...opts, shellGapMm: undefined });
+    expect(closedShells(t)).toBe(true);
+    expect((volume(t) - 100 * 100 * 3) / (50 * 6.5)).toBeGreaterThan(0.98);
+    expect(isSimple(bowTie.outer)).toBe(false);
+    expect(isSimple(square(0, 0, 10).outer)).toBe(true);
   });
 
   it('insets outlines into the solid', () => {
