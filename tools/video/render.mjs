@@ -22,7 +22,7 @@ const END_S = 3.2;
 const SCENES = [
   { place: 'Hong Kong', hash: 'lat=22.2795&lon=114.1605&km=2&ex=1', lines: ['Any address', 'as a 3D model'] },
   { place: 'Porto', hash: 'lat=41.1405&lon=-8.6110&km=2&ex=1.5', lines: ['Real terrain.', 'Every building.'] },
-  { place: 'Grand Canyon Village', hash: 'lat=36.0600&lon=-112.1390&km=2&ex=1', lines: ['Cliffs and canyons,', 'to scale'] },
+  { place: 'Grand Canyon Village', hash: 'lat=36.0610&lon=-112.1390&km=2&ex=1', lines: ['Cliffs and canyons,', 'to scale'], az: [205, 155] },
   { place: 'Salzburg', hash: 'lat=47.7985&lon=13.0455&km=2&ex=1.5', lines: ['Save a poster,', 'or 3D print it'] },
 ];
 
@@ -30,6 +30,8 @@ const FORMATS = [
   { key: 'vertical', file: 'your-place-9x16.mp4', width: 1080, height: 1920 },
   { key: 'wide', file: 'your-place-16x9.mp4', width: 1920, height: 1080 },
 ];
+
+const DEFAULT_AZ = [-28, 24]; // camera sweep in degrees: 0 looks north, 180 looks south
 
 // ------------------------------------------------------------------ static server for dist/
 
@@ -52,6 +54,7 @@ const OVERLAY_CSS = `
   #promo { position: fixed; inset: 0; z-index: 100; pointer-events: none; color: #1e1c19;
     --paper: radial-gradient(120% 90% at 50% 30%, #f4f1ec 0%, #d9d3c8 100%); }
   #promo .scrim-top, #promo .scrim-bottom { position: absolute; left: 0; right: 0; }
+  #promo .scrim-left { display: none; }
   #promo .scrim-top { top: 0; background: linear-gradient(#f2efe9 30%, rgba(242,239,233,0)); }
   #promo .scrim-bottom { bottom: 0; background: linear-gradient(rgba(222,216,206,0), #ded8ce 70%); }
   #promo .brand { position: absolute; font: 650 26px/1 Inter, sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: #b13a15; }
@@ -77,16 +80,18 @@ const OVERLAY_CSS = `
   #promo.vertical .place { bottom: 230px; left: 0; right: 0; text-align: center; }
   #promo.vertical .credit { bottom: 70px; left: 0; right: 0; text-align: center; }
   /* wide 16:9: caption on the left, the model sits right of centre */
-  #promo.wide { --cap-size: 92px; }
+  #promo.wide { --cap-size: 84px; }
   #promo.wide .scrim-top, #promo.wide .scrim-bottom { display: none; }
+  #promo.wide .scrim-left { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 980px;
+    background: linear-gradient(90deg, rgba(240,237,231,0.97) 0%, rgba(240,237,231,0.9) 50%, rgba(240,237,231,0) 100%); }
   #promo.wide .brand { top: 110px; left: 120px; }
-  #promo.wide .caption { top: 50%; left: 120px; width: 760px; margin-top: -110px; }
+  #promo.wide .caption { top: 50%; left: 120px; width: 640px; margin-top: -100px; }
   #promo.wide .place { bottom: 120px; left: 120px; }
   #promo.wide .credit { bottom: 50px; right: 60px; }
 `;
 const OVERLAY_HTML = (fmt) => `
   <div id="promo" class="${fmt}">
-    <div class="scrim-top"></div><div class="scrim-bottom"></div>
+    <div class="scrim-top"></div><div class="scrim-bottom"></div><div class="scrim-left"></div>
     <div class="brand">Your Place</div>
     <div class="caption"><div class="l1"></div><div class="l2"></div></div>
     <div class="place"></div>
@@ -142,11 +147,12 @@ for (const fmt of FORMATS) {
     for (let i = 0; i < total; i++) {
       const s = i / FPS;
       const t = ease(i / (total - 1));
-      const az = -28 + 52 * t;
+      const [az0, az1] = scene.az ?? DEFAULT_AZ;
+      const az = az0 + (az1 - az0) * t;
       const tilt = 36 + 16 * t;
-      const distance = d0 * (fmt.key === 'wide' ? 0.86 - 0.16 * t : 0.9 - 0.2 * t);
+      const distance = d0 * (fmt.key === 'wide' ? 1.0 - 0.14 * t : 0.88 - 0.2 * t);
       // wide: keep the model right of centre, clear of the caption (move the target to the screen's left)
-      const shift = fmt.key === 'wide' ? distance * 0.13 : 0;
+      const shift = fmt.key === 'wide' ? distance * 0.2 : 0;
       const r = (az * Math.PI) / 180;
       const cam = { azimuth: az, tilt, distance, targetE: -shift * Math.cos(r), targetN: -shift * Math.sin(r) };
       const dipIn = si === 0 ? 1 - s / (DIP_S * 1.6) : 1 - s / DIP_S;
