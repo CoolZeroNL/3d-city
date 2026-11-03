@@ -22,7 +22,8 @@ const END_S = 3.2;
 const SCENES = [
   { place: 'Hong Kong', hash: 'lat=22.2795&lon=114.1605&km=2&ex=1', lines: ['Any address', 'as a 3D model'] },
   { place: 'Porto', hash: 'lat=41.1405&lon=-8.6110&km=2&ex=1.5', lines: ['Real terrain.', 'Every building.'] },
-  { place: 'Grand Canyon Village', hash: 'lat=36.0610&lon=-112.1390&km=2&ex=1', lines: ['Cliffs and canyons,', 'to scale'], az: [205, 155] },
+  // 1 km side-on: the cut side wall shows the drop from the village on the rim into the canyon
+  { place: 'Grand Canyon Village', hash: 'lat=36.0590&lon=-112.1385&km=1&ex=1', lines: ['Cliffs and canyons,', 'to scale'], az: [115, 70] },
   { place: 'Salzburg', hash: 'lat=47.7985&lon=13.0455&km=2&ex=1.5', lines: ['Save a poster,', 'or 3D print it'] },
 ];
 
