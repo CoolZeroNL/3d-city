@@ -1,0 +1,44 @@
+name: Promo video preview
+
+# Copies the contact sheets (one frame per second) of the newest draft promo-video release to the
+# branch "video-preview", so the cut can be checked without downloading the videos. Run it again with
+# "delete" to remove that branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: publish or delete
+        required: true
+        default: publish
+        type: choice
+        options: [publish, delete]
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Delete the preview branch
+        if: inputs.action == 'delete'
+        run: git push origin --delete video-preview || echo "nothing to delete"
+
+      - name: Copy the contact sheets to the preview branch
+        if: inputs.action == 'publish'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sheets"
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.draft)][0].assets[] | select(.name | endswith("-sheet.jpg")) | "\(.url) \(.name)"' |
+            while read -r url name; do gh api -H 'Accept: application/octet-stream' "$url" > "$RUNNER_TEMP/sheets/$name"; done
+          ls -la "$RUNNER_TEMP/sheets"
+          git switch --orphan video-preview
+          cp "$RUNNER_TEMP"/sheets/*.jpg .
+          git add ./*.jpg
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m 'Promo video contact sheets'
+          git push -f origin video-preview
