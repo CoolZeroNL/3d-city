@@ -72,4 +72,12 @@ describe('roof bumps in surface-model elevation data', () => {
     expect(removeRoofBumps(roofed, halls).applied).toBe(true);
     for (const [x, y] of SPOTS) expect(Math.abs(sampleGrid(roofed, x, y) - slope(x, y))).toBeLessThan(3);
   });
+
+  it('also reaches roofs at the edge of the model', () => {
+    const edge: [number, number] = [470, -150];
+    const g = grid((e, n) => 10 + roofs(e, n) + bump(e, n, edge[0], edge[1], 18, 22));
+    const r = removeRoofBumps(g, [...halls, square(edge[0], edge[1], 40, 20)]);
+    expect(r.applied).toBe(true);
+    expect(sampleGrid(g, edge[0], edge[1])).toBeLessThan(12);
+  });
 });

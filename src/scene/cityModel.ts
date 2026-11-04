@@ -10,7 +10,7 @@ import { centroid, pointInRing, signedArea, type Polygon, type Pt } from '../geo
 import { isEstimated, resolveHeights } from '../geo/heights';
 import { computeSeaMask, isSea, seaMaskFromPolygons, seaShare, type SeaMask } from '../geo/sea';
 import { contourInterval, sampleGrid, type HeightGrid } from '../geo/terrain';
-import { removeRoofBumps, type RoofBumpResult } from '../geo/surface';
+import { measureGround, removeRoofBumps, type RoofBumpResult } from '../geo/surface';
 import type { BuildingStyle, Layers } from '../state';
 import {
   applyBuildingStyle,
@@ -305,19 +305,12 @@ export class CityModel {
     const buckets = [0, 5, 10, 20, 40, 80, 150, 300, 1e9];
     const histogram = buckets.slice(0, -1).map((lo, k) => ({ from: lo, to: buckets[k + 1], count: rows.filter((x) => x.height >= lo && x.height < buckets[k + 1]).length }));
     const by = (key: (x: (typeof rows)[number]) => number) => [...rows].sort((a, c) => key(c) - key(a)).slice(0, 15);
-    // ground bumps under large buildings: elevation data that measured roofs (surface models)
+    // ground bumps under large buildings, measured exactly as removeRoofBumps does
     const bumps = rows
       .filter((x) => x.area > 1500)
-      .map((x) => {
-        const r = Math.sqrt(x.area / Math.PI);
-        const at = (e: number, n: number) => sampleGrid(this.grid, e, n);
-        let inside = at(x.e, x.n);
-        for (let k = 0; k < 4; k++) inside += at(x.e + Math.cos((k * Math.PI) / 2) * r * 0.4, x.n + Math.sin((k * Math.PI) / 2) * r * 0.4);
-        inside /= 5;
-        let ring = 0;
-        for (let k = 0; k < 16; k++) ring += at(x.e + Math.cos((k * Math.PI) / 8) * (r + 30), x.n + Math.sin((k * Math.PI) / 8) * (r + 30));
-        ring /= 16;
-        return { height: x.height, area: x.area, e: x.e, n: x.n, bump: Math.round((inside - ring) * 10) / 10 };
+      .flatMap((x) => {
+        const m = measureGround(this.grid, this.specs[x.i].poly);
+        return m ? [{ height: x.height, area: x.area, e: x.e, n: x.n, bump: Math.round(m.bump * 10) / 10, hill: m.hill }] : [];
       })
       .sort((a, c) => c.bump - a.bump);
     const median = (v: number[]) => (v.length ? [...v].sort((a, c) => a - c)[v.length >> 1] : 0);

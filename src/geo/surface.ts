@@ -59,17 +59,74 @@ interface Measured {
  * slope; a low percentile skips neighbouring roofs.
  */
 function groundAround(grid: HeightGrid, cx: number, cy: number, d0: number, d1: number): number {
+  // near the model's edge only points inside it count; with too few opposite pairs left,
+  // single points stand in (less slope-proof, but better than reading the edge again and again)
+  const h = grid.sizeM / 2;
+  const within = (x: number, y: number) => Math.abs(x) <= h && Math.abs(y) <= h;
   const pairs: number[] = [];
+  const singles: number[] = [];
   for (const d of [d0, (d0 + d1) / 2, d1]) {
     for (let k = 0; k < 12; k++) {
       const a = (k * Math.PI) / 12;
       const dx = Math.cos(a) * d;
       const dy = Math.sin(a) * d;
-      pairs.push((sampleGrid(grid, cx + dx, cy + dy) + sampleGrid(grid, cx - dx, cy - dy)) / 2);
+      const inA = within(cx + dx, cy + dy);
+      const inB = within(cx - dx, cy - dy);
+      if (inA && inB) pairs.push((sampleGrid(grid, cx + dx, cy + dy) + sampleGrid(grid, cx - dx, cy - dy)) / 2);
+      if (inA) singles.push(sampleGrid(grid, cx + dx, cy + dy));
+      if (inB) singles.push(sampleGrid(grid, cx - dx, cy - dy));
     }
   }
-  pairs.sort((a, c) => a - c);
-  return pairs[Math.floor(pairs.length * 0.25)];
+  const use = pairs.length >= 8 ? pairs : singles;
+  if (use.length < 6) return NaN;
+  use.sort((a, c) => a - c);
+  return use[Math.floor(use.length * 0.25)];
+}
+
+/**
+ * How far the ground under a building rises above street level around it (`bump`), and whether
+ * the ground keeps falling further out (`hill`: a real hill rather than a roof in the data).
+ * Exported for tools/inspect, so the inspection measures exactly what the fix uses.
+ */
+export function measureGround(grid: HeightGrid, poly: Polygon): { bump: number; near: number; hill: boolean; area: number } | null {
+  const ring = poly.outer;
+  const area = Math.abs(signedArea(ring)) - poly.holes.reduce((a, r) => a + Math.abs(signedArea(r)), 0);
+  if (ring.length < 3) return null;
+  const { n, sizeM, elev } = grid;
+  const step = sizeM / (n - 1);
+  const h = sizeM / 2;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of ring) {
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x);
+    y1 = Math.max(y1, y);
+  }
+  if (x1 < -h || x0 > h || y1 < -h || y0 > h) return null;
+  // the ground under the building: grid points inside it, or its middle for small ones
+  let sum = 0;
+  let count = 0;
+  for (let j = Math.max(0, Math.ceil((y0 + h) / step)); j <= Math.min(n - 1, Math.floor((y1 + h) / step)); j++) {
+    for (let i = Math.max(0, Math.ceil((x0 + h) / step)); i <= Math.min(n - 1, Math.floor((x1 + h) / step)); i++) {
+      if (pointInRing([-h + i * step, -h + j * step], ring)) {
+        sum += elev[j * n + i];
+        count++;
+      }
+    }
+  }
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const inside = count ? sum / count : sampleGrid(grid, cx, cy);
+  // street level just around it, and further out: a roof bump is level again just beyond the
+  // building, a real hill keeps falling
+  const r = Math.sqrt(Math.max(area, 1) / Math.PI);
+  const near = groundAround(grid, cx, cy, r + 25, r + 45);
+  if (Number.isNaN(near)) return null;
+  const far = groundAround(grid, cx, cy, r + 90, r + 130);
+  const bump = inside - near;
+  // without ground further out (deep in a corner) a hill can't be ruled out: count it as one
+  const hill = Number.isNaN(far) || near - far > Math.max(3, 0.3 * bump);
+  return { bump, near, hill, area };
 }
 
 const isRoof = (m: Measured, minBump: number) => m.bump > minBump && m.bump <= roofCap(m.height) && !m.hill;
@@ -96,9 +153,9 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
   const measured: Measured[] = [];
 
   for (const b of buildings) {
+    const m = measureGround(grid, b.poly);
+    if (!m || m.area < ROOF_MIN_AREA) continue;
     const ring = b.poly.outer;
-    const area = Math.abs(signedArea(ring)) - b.poly.holes.reduce((a, r) => a + Math.abs(signedArea(r)), 0);
-    if (area < ROOF_MIN_AREA || ring.length < 3) continue;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const [x, y] of ring) {
       x0 = Math.min(x0, x);
@@ -106,28 +163,7 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
       x1 = Math.max(x1, x);
       y1 = Math.max(y1, y);
     }
-    if (x1 < -h || x0 > h || y1 < -h || y0 > h) continue;
-    // the ground under the building: grid points inside it, or its middle for small ones
-    let sum = 0;
-    let count = 0;
-    for (let j = Math.max(0, Math.ceil((y0 + h) / step)); j <= Math.min(n - 1, Math.floor((y1 + h) / step)); j++) {
-      for (let i = Math.max(0, Math.ceil((x0 + h) / step)); i <= Math.min(n - 1, Math.floor((x1 + h) / step)); i++) {
-        if (pointInRing([-h + i * step, -h + j * step], ring)) {
-          sum += elev[j * n + i];
-          count++;
-        }
-      }
-    }
-    const cx = (x0 + x1) / 2;
-    const cy = (y0 + y1) / 2;
-    const inside = count ? sum / count : sampleGrid(grid, cx, cy);
-    // street level just around it, and further out: a roof bump is level again just beyond the
-    // building, a real hill keeps falling
-    const r = Math.sqrt(area / Math.PI);
-    const near = groundAround(grid, cx, cy, r + 25, r + 45);
-    const far = groundAround(grid, cx, cy, r + 90, r + 130);
-    const bump = inside - near;
-    measured.push({ ring, bbox: [x0, y0, x1, y1], ref: near, bump, height: b.height, hill: near - far > Math.max(3, 0.3 * bump) });
+    measured.push({ ring, bbox: [x0, y0, x1, y1], ref: m.near, bump: m.bump, height: b.height, hill: m.hill });
   }
 
   const bumped = measured.filter((m) => isRoof(m, ROOF_BUMP_M)).length;
