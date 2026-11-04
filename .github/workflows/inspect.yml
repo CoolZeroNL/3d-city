@@ -1,0 +1,60 @@
+name: Inspect a place
+
+# Renders one place from live map data with tools/inspect/inspect.mjs and copies the pictures and
+# building statistics to the branch "inspect", for diagnosing odd-looking models. Run it again with
+# "delete" to remove that branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      place:
+        description: The part of a share link after "#", e.g. lat=51.9244&lon=4.4778&km=4&ex=1.4
+        required: false
+        default: lat=51.9244&lon=4.4778&km=4&ex=1.4
+      action:
+        description: publish or delete
+        required: true
+        default: publish
+        type: choice
+        options: [publish, delete]
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Delete the inspect branch
+        if: inputs.action == 'delete'
+        run: git push origin --delete inspect || echo "nothing to delete"
+
+      - name: Set up Node.js
+        if: inputs.action == 'publish'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build and render
+        if: inputs.action == 'publish'
+        env:
+          INSPECT_PLACE: ${{ inputs.place }}
+        run: |
+          npm ci && npm run build
+          npm i --no-save --no-audit --no-fund playwright@1.64.1 && npx playwright install --with-deps chromium
+          node tools/inspect/inspect.mjs
+
+      - name: Copy the results to the inspect branch
+        if: inputs.action == 'publish'
+        run: |
+          cp -r inspect-out "$RUNNER_TEMP/inspect-out"
+          git switch --orphan inspect
+          cp "$RUNNER_TEMP"/inspect-out/* .
+          git add ./*.jpg ./stats.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m 'Inspection'
+          git push -f origin inspect

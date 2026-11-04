@@ -6,7 +6,7 @@
 
 import { BufferGeometry, Color, CylinderGeometry, Group, MathUtils, Mesh, MeshStandardMaterial, SphereGeometry, type IUniform, type Object3D, type Raycaster, type Vector3 } from 'three';
 import type { BuildingFeature, FeatureSet } from '../geo/osm';
-import { centroid, pointInRing, type Polygon, type Pt } from '../geo/polygon';
+import { centroid, pointInRing, signedArea, type Polygon, type Pt } from '../geo/polygon';
 import { isEstimated, resolveHeights } from '../geo/heights';
 import { computeSeaMask, isSea, seaMaskFromPolygons, seaShare, type SeaMask } from '../geo/sea';
 import { contourInterval, sampleGrid, type HeightGrid } from '../geo/terrain';
@@ -269,6 +269,44 @@ export class CityModel {
 
   setContours(on: boolean): void {
     this.contour.value = on ? 1 : 0;
+  }
+
+  /**
+   * Numbers for diagnosing an odd-looking model (tools/inspect): the tallest and most slender
+   * buildings, and any building whose vertices stray outside its footprint.
+   */
+  inspect(): unknown {
+    const b = this.buildings?.build;
+    if (!b) return null;
+    const pos = b.geometry.getAttribute('position');
+    const rows = this.specs.map((s, i) => {
+      const area = Math.abs(signedArea(s.poly.outer)) - s.poly.holes.reduce((a, h) => a + Math.abs(signedArea(h)), 0);
+      const [e0, n0, e1, n1] = b.bounds.subarray(i * 4, i * 4 + 4);
+      let stray = 0;
+      let yMax = -Infinity;
+      for (let v = b.starts[i]; v < b.starts[i + 1]; v++) {
+        const x = pos.getX(v);
+        const n = -pos.getZ(v);
+        if (x < e0 - 1 || x > e1 + 1 || n < n0 - 1 || n > n1 + 1) stray++;
+        yMax = Math.max(yMax, pos.getY(v));
+      }
+      const r = (v: number) => Math.round(v * 10) / 10;
+      return { i, height: r(s.height), minHeight: r(s.minHeight), estimated: s.estimated, area: r(area), width: r(e1 - e0), depth: r(n1 - n0), points: s.poly.outer.length, holes: s.poly.holes.length, e: r((e0 + e1) / 2), n: r((n0 + n1) / 2), ground: r(b.buildingGround[i]), stray, yMax: r(yMax) };
+    });
+    const buckets = [0, 5, 10, 20, 40, 80, 150, 300, 1e9];
+    const histogram = buckets.slice(0, -1).map((lo, k) => ({ from: lo, to: buckets[k + 1], count: rows.filter((x) => x.height >= lo && x.height < buckets[k + 1]).length }));
+    const by = (key: (x: (typeof rows)[number]) => number) => [...rows].sort((a, c) => key(c) - key(a)).slice(0, 15);
+    return {
+      count: rows.length,
+      estimated: rows.filter((x) => x.estimated).length,
+      histogram,
+      tallest: by((x) => x.height),
+      slender: by((x) => x.height / Math.sqrt(Math.max(x.area, 0.01))),
+      tiny: rows.filter((x) => x.area < 4).length,
+      strayBuildings: rows.filter((x) => x.stray > 0).length,
+      strayExamples: rows.filter((x) => x.stray > 0).slice(0, 10),
+      vertexYMax: Math.max(...rows.map((x) => x.yMax)),
+    };
   }
 
   stats(): ModelStats {

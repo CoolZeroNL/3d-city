@@ -235,6 +235,8 @@ try {
   expect(t.stats.buildings > 1000, `buildings are extruded (${t.stats.buildings})`);
   expect(t.stats.maxElev - t.stats.minElev > 20, `terrain has relief (${Math.round(t.stats.minElev)}–${Math.round(t.stats.maxElev)} m)`);
   expect(t.stats.tallest >= 100, `building heights come from the data (tallest ${Math.round(t.stats.tallest)} m)`);
+  const insp = await page.evaluate(() => window.__yourPlace.inspect());
+  expect(insp.count === t.stats.buildings && insp.strayBuildings === 0 && insp.tallest[0].height >= 100, `the inspection hook reports every building, none with stray geometry (${insp.count}, ${insp.strayBuildings} stray)`);
   const hash = await page.evaluate(() => location.hash);
   expect(/lat=48\.7765/.test(hash) && /cam=/.test(hash), 'URL hash holds coordinates and camera');
   expect(!/stuttgart/i.test(hash), 'URL hash holds no address text');

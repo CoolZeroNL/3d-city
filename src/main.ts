@@ -47,6 +47,8 @@ const debug = {
   stage: 'idle' as 'idle' | 'loading' | 'terrain' | 'ready' | 'error',
   timings: {} as Record<string, number>,
   stats: () => model?.stats() ?? null,
+  /** used by tools/inspect to diagnose odd-looking models */
+  inspect: () => model?.inspect() ?? null,
   camera: () => (model ? viewer.getCameraState() : null),
   notice: () => (notice.visible ? $('notice-text').textContent : null),
   source: '' as '' | 'tiles' | 'overpass',
