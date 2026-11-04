@@ -4,7 +4,7 @@ import { areaKind, buildingsQuery, lineClass, parseBuildings, parseFeatures, typ
 import { assembleRings, clipRingToRect, groupPolygons, pointInRing, signedArea, type Ring } from '../src/geo/polygon';
 import { lngLatToTile, makeProjector, squareBBox } from '../src/geo/projection';
 import { chooseZoom, contourInterval, decodeTerrarium, gridFromMosaic, sampleGrid, SEA_FLOOR } from '../src/geo/terrain';
-import { parseCoordinates, photonLabel } from '../src/geo/geocode';
+import { parseCoordinates, parseMapLink, photonLabel, suggestionFits, typedNumbers, type Place } from '../src/geo/geocode';
 
 const center = { lat: 52.2647, lon: 10.5236 };
 
@@ -251,5 +251,38 @@ describe('geocoding helpers', () => {
       detail: '80331 München, Germany',
     });
     expect(photonLabel({ name: 'Heidelberg', state: 'Baden-Württemberg', country: 'Germany' }).label).toBe('Heidelberg');
+  });
+
+  it('reads positions from pasted map links', () => {
+    const at = { lat: 48.7758, lon: 9.1829 };
+    expect(parseMapLink('https://www.google.com/maps/place/Schlossplatz/@48.7761,9.1801,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d48.7758!4d9.1829!16s')).toEqual(at);
+    expect(parseMapLink('https://www.google.com/maps/@48.7758,9.1829,15z')).toEqual(at);
+    expect(parseMapLink('https://www.google.com/maps?q=48.7758%2C9.1829')).toEqual(at);
+    expect(parseMapLink('https://www.google.com/maps/search/48.7758,+9.1829')).toEqual(at);
+    expect(parseMapLink('https://maps.apple.com/?ll=48.7758,9.1829&q=Dropped%20Pin')).toEqual(at);
+    expect(parseMapLink('https://maps.apple.com/place?coordinate=48.7758,9.1829&name=Marked%20Location')).toEqual(at);
+    expect(parseMapLink('https://www.openstreetmap.org/?mlat=48.7758&mlon=9.1829#map=17/48.7700/9.1800')).toEqual(at);
+    expect(parseMapLink('https://www.openstreetmap.org/#map=17/48.7758/9.1829')).toEqual(at);
+    expect(parseMapLink('geo:48.7758,9.1829?z=17')).toEqual(at);
+    expect(parseMapLink('https://maps.app.goo.gl/AbCdEf123')).toBeNull(); // short links hide the position
+    expect(parseMapLink('Schlossplatz 1, Stuttgart')).toBeNull();
+  });
+
+  it('finds house numbers but not ordinals or postcodes inside words', () => {
+    expect(typedNumbers('1234 10 Ave SW, Calgary')).toEqual(['1234', '10']);
+    expect(typedNumbers('350 5th Avenue, New York')).toEqual(['350']);
+    expect(typedNumbers('Hauptstraße 12a, 70173 Stuttgart')).toEqual(['12a', '70173']);
+    expect(typedNumbers('SW1A 1AA London')).toEqual([]);
+  });
+
+  it('takes the top suggestion on Enter only when it carries the typed house number', () => {
+    const street: Place = { label: '10 Avenue SW', detail: 'Calgary, Canada', center: { lat: 51, lon: -114 }, kind: 'street' };
+    const house: Place = { label: '10 Avenue SW 1234', detail: 'Calgary, Canada', center: { lat: 51, lon: -114 }, kind: 'address', housenumber: '1234' };
+    const postcode: Place = { label: '70173', detail: 'Stuttgart, Germany', center: { lat: 48.7, lon: 9.1 }, kind: 'postcode' };
+    expect(suggestionFits('1234 10 Ave SW Calgary', street)).toBe(false);
+    expect(suggestionFits('1234 10 Ave SW Calgary', house)).toBe(true);
+    expect(suggestionFits('Stuttgart', street)).toBe(true);
+    expect(suggestionFits('70173', postcode)).toBe(true);
+    expect(suggestionFits('Fifth Avenue New York', street)).toBe(true);
   });
 });

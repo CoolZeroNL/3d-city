@@ -112,6 +112,7 @@ async function routeAll(context) {
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
   });
   await context.route(/photon\.komoot\.io\/api/, (route) => {
+    counters.photon = (counters.photon ?? 0) + 1;
     const url = new URL(route.request().url());
     const q = url.searchParams.get('q') ?? '';
     let body = photon;
@@ -120,6 +121,7 @@ async function routeAll(context) {
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
   });
   await context.route(/nominatim\.openstreetmap\.org/, (route) =>
+    (counters.nominatim = (counters.nominatim ?? 0) + 1) &&
     route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify([{ lat: String(PLACE.lat), lon: String(PLACE.lon), name: 'Stuttgart', display_name: 'Stuttgart, Baden-Württemberg, Germany' }]) }),
   );
   await context.route(/elevation-tiles-prod\/terrarium\/(\d+)\/(\d+)\/(\d+)\.png/, async (route) => {
@@ -345,6 +347,8 @@ try {
   const t2 = await waitStage(p2, ['ready', 'error']);
   const s2 = await p2.evaluate(() => window.__yourPlace.state());
   expect(t2.stage === 'ready', 'shared link rebuilds the model');
+  await p2.waitForTimeout(2800);
+  expect(!/shared with you/.test((await p2.evaluate(() => window.__yourPlace.notice())) ?? ''), 'your own link opens without the “make your own” invitation');
   expect(s2.contours === true && s2.style === 'ramp' && Math.abs(s2.exaggeration - 3) < 1e-6, 'shared link restores settings');
   expect(/Mitte|Stuttgart/.test(await p2.textContent('#place-title')), 'shared link resolves a neighbourhood name');
   const pin2 = await p2.evaluate(() => window.__yourPlace.pin());
@@ -467,6 +471,43 @@ try {
   await settle(mp, 400);
   await shot(mp, '10-sheet-phone');
   await phone.close();
+
+  // ---------------- search: house numbers, map links, and the invitation on shared links
+  const sctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await routeAll(sctx);
+  const sp = await sctx.newPage();
+  watchConsole(sp, 'search');
+  await sp.goto(base);
+  await sp.waitForSelector('#welcome', { state: 'visible' });
+  expect(/grew up/.test(await sp.textContent('#welcome-title')), 'the start screen leads with a place that matters to you');
+  const nomBefore = counters.nominatim ?? 0;
+  await sp.fill('#search-input', 'Königstraße 28, Stuttgart');
+  await sp.waitForSelector('#suggestions li[role="option"]', { timeout: 5000 });
+  await sp.keyboard.press('Enter');
+  const ts = await waitStage(sp, ['ready', 'error']);
+  expect((counters.nominatim ?? 0) > nomBefore && ts.stage === 'ready', 'Enter with a house number the suggestions lack asks Nominatim for the exact address');
+  const photonBefore = counters.photon ?? 0;
+  await sp.fill('#search-input', 'https://www.google.com/maps/place/Somewhere/@48.7790,9.1810,17z/data=!3m1!4b1!8m2!3d48.7800!4d9.1820');
+  await sp.waitForTimeout(500);
+  await sp.keyboard.press('Enter');
+  await sp.waitForFunction(() => { const c = window.__yourPlace.state().center; return c && Math.abs(c.lat - 48.78) < 1e-6 && window.__yourPlace.stage === 'ready'; }, null, { timeout: 60000 }).catch(() => undefined);
+  const linked = await sp.evaluate(() => window.__yourPlace.state().center);
+  expect(Math.abs(linked.lat - 48.78) < 1e-6 && Math.abs(linked.lon - 9.182) < 1e-6, 'a pasted Google Maps link goes to the pinned place');
+  expect((counters.photon ?? 0) === photonBefore, 'map links are not sent for suggestions');
+  await sctx.close();
+
+  const ictx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await routeAll(ictx);
+  const ip = await ictx.newPage();
+  watchConsole(ip, 'invite');
+  await ip.goto(`${base}#lat=48.77650&lon=9.17720&km=1&ex=1.5`);
+  await waitStage(ip, ['ready', 'error']);
+  await ip.waitForFunction(() => /shared with you/.test(window.__yourPlace.notice() ?? ''), null, { timeout: 8000 }).catch(() => undefined);
+  expect(/shared with you/.test((await ip.evaluate(() => window.__yourPlace.notice())) ?? ''), 'someone opening a shared link is invited to make their own place');
+  await shot(ip, '13-shared-invite');
+  await ip.click('#notice-actions .btn-primary');
+  expect(await ip.evaluate(() => document.activeElement?.id === 'search-input' && document.activeElement.value === ''), '“Make my place” puts the cursor in an empty search box');
+  await ictx.close();
 
   // ---------------- the "How it works" page, on a phone
   const aboutCtx = await browser.newContext({ ...devices['iPhone 13'] });

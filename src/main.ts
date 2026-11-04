@@ -31,6 +31,9 @@ const app = $('app');
 /** the landing page's title; a loaded place puts its name in the tab instead */
 const HOME_TITLE = document.title;
 let state: ViewState = decodeState(location.hash);
+/** Set once this browser has opened a place of its own; until then a shared model ends with an invitation. */
+const OWN_KEY = 'yp:own';
+let inviteOwn = !!state.center && !readFlag(OWN_KEY);
 let model: CityModel | null = null;
 let placeLabel = '';
 let loadToken = 0;
@@ -81,6 +84,7 @@ setupSearch({
   onPick: (p) => openPlace(p),
   onLocate: locate,
   onError: (m) => status.say(m),
+  onNote: (m) => toast(m, 6000),
 });
 
 const wide = window.matchMedia('(min-width: 880px)');
@@ -185,6 +189,7 @@ async function resolvePick(p: Place): Promise<Place> {
 }
 
 async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}): Promise<void> {
+  markOwnPlace();
   if (opts.size) state.size = opts.size;
   if (opts.ex) state.exaggeration = opts.ex;
   state.pin = null;
@@ -369,7 +374,52 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   if (stale()) return;
   debug.timings.total = performance.now() - t0;
   debug.stage = status.get('buildings') === 'error' || status.get('layers') === 'error' ? 'error' : 'ready';
-  if (debug.stage === 'ready') showGestureTip();
+  if (debug.stage === 'ready') {
+    showGestureTip();
+    offerOwnPlace();
+  }
+}
+
+// ------------------------------------------------------------------ shared links: "make one of your own"
+
+function readFlag(key: string): boolean {
+  try {
+    return !!localStorage.getItem(key);
+  } catch {
+    return false;
+  }
+}
+
+function markOwnPlace(): void {
+  inviteOwn = false;
+  try {
+    localStorage.setItem(OWN_KEY, '1');
+  } catch {
+    /* private browsing: the invitation may show again next time */
+  }
+}
+
+/** Someone who opened a shared model sees it first, then an invitation to make one of their own place. */
+function offerOwnPlace(): void {
+  if (!inviteOwn) return;
+  inviteOwn = false;
+  const token = loadToken;
+  window.setTimeout(() => {
+    if (token !== loadToken || notice.visible) return;
+    notice.show('This place was shared with you. Make one of your own: your street, your first home, where you met.', [
+      {
+        label: 'Make my place',
+        primary: true,
+        onClick: () => {
+          notice.hide();
+          markOwnPlace();
+          const input = $<HTMLInputElement>('search-input');
+          input.value = '';
+          input.focus();
+        },
+      },
+    ]);
+  }, 2500);
 }
 
 // ------------------------------------------------------------------ the pin: "this one is ours"
@@ -706,7 +756,7 @@ function bindShare(): void {
 
   nativeBtn.addEventListener('click', async () => {
     try {
-      await navigator.share({ title: `${placeLabel || 'Your Place'} in 3D`, url: url.value });
+      await navigator.share({ title: `${placeLabel || 'Your Place'} in 3D`, text: `${placeLabel || 'This place'} in 3D. Make one of your own place:`, url: url.value });
     } catch {
       /* dismissed */
     }

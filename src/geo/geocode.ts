@@ -17,6 +17,8 @@ export interface Place {
   kind?: PlaceKind;
   /** for postcode and area results: the town or village the geocoder associates with it */
   settlement?: string;
+  /** the house number, when the result is an address */
+  housenumber?: string;
 }
 
 export const KIND_LABEL: Record<PlaceKind, string> = {
@@ -67,6 +69,7 @@ export function placeKind(p: { osm_key?: string; osm_value?: string; type?: stri
 }
 
 const PHOTON = 'https://photon.komoot.io';
+const formatLinkLabel = (c: LngLat) => `${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}`;
 const NOMINATIM = 'https://nominatim.openstreetmap.org';
 const PHOTON_LANGS = new Set(['en', 'de', 'fr', 'it']);
 
@@ -123,7 +126,62 @@ export function photonPlace(f: PhotonFeature): Place {
   const kind = placeKind(f.properties);
   const p = f.properties;
   const settlement = kind === 'postcode' || kind === 'area' ? p.city || (kind === 'area' ? p.name : undefined) : undefined;
-  return { label, detail, center: { lon, lat }, kind, settlement };
+  return { label, detail, center: { lon, lat }, kind, settlement, housenumber: p.housenumber };
+}
+
+const validLatLon = (lat: number, lon: number) => Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180;
+
+/**
+ * Coordinates from a pasted map link: Google Maps (the place's own pin, a ?q= or the view centre),
+ * Apple Maps (ll, q, coordinate), OpenStreetMap (marker or #map view), Bing (cp) and geo: URIs.
+ * Short links (maps.app.goo.gl and similar) hide the position and return null.
+ */
+export function parseMapLink(q: string): LngLat | null {
+  const s = q.trim();
+  if (!/^(https?:\/\/|geo:)/i.test(s)) return null;
+  let t = s;
+  try {
+    t = decodeURIComponent(s);
+  } catch {
+    /* keep it as typed */
+  }
+  const n = '(-?\\d{1,3}(?:\\.\\d+)?)';
+  const patterns = [
+    `!3d${n}!4d${n}`, // Google: the place itself
+    `[?&](?:q|query|ll|sll|coordinate|center|daddr|destination)=${n},\\s*\\+?${n}`, // Google and Apple queries
+    `[?&]mlat=${n}&mlon=${n}`, // OpenStreetMap marker
+    `#map=\\d+(?:\\.\\d+)?/${n}/${n}`, // OpenStreetMap view
+    `/(?:search|place|dir)/${n},\\s*\\+?${n}`, // Google paths
+    `@${n},${n}`, // Google view centre
+    `^geo:${n},${n}`, // geo: URI
+    `[?&]cp=${n}~${n}`, // Bing
+  ];
+  for (const p of patterns) {
+    const m = new RegExp(p, 'i').exec(t);
+    if (!m) continue;
+    const lat = Number(m[1]);
+    const lon = Number(m[2]);
+    if (validLatLon(lat, lon)) return { lat, lon };
+  }
+  return null;
+}
+
+/** House-number-like tokens in a typed address ("12", "12a"); ordinals such as "5th" are street names. */
+export function typedNumbers(q: string): string[] {
+  return (q.match(/(?<![\p{L}\d])\d{1,6}[a-z]?(?![\p{L}\d])/giu) ?? []).map((x) => x.toLowerCase());
+}
+
+/**
+ * Whether the top suggestion fits what was typed well enough to take it on Enter. When the
+ * typed text has a number and the suggestion doesn't carry it (a street instead of the house,
+ * "10 St" for "10 Ave"), it doesn't: the full address goes to Nominatim instead.
+ */
+export function suggestionFits(q: string, p: Place): boolean {
+  const numbers = typedNumbers(q);
+  if (!numbers.length) return true;
+  if (!/\p{L}{2,}/u.test(q.replace(/\d+[a-z]?/gi, ''))) return true; // a bare postcode
+  const own = [p.housenumber, p.kind === 'postcode' ? p.label : undefined].filter(Boolean).map((x) => x!.toLowerCase().replace(/\s+/g, ''));
+  return own.some((x) => numbers.includes(x));
 }
 
 async function photonSearch(q: string, bias: LngLat | null, signal: AbortSignal | undefined, extra: Record<string, string> = {}): Promise<Place[]> {
@@ -184,6 +242,8 @@ export async function resolveToSettlement(p: Place, signal?: AbortSignal): Promi
 export async function searchOnce(q: string, signal?: AbortSignal): Promise<Place | null> {
   const coords = parseCoordinates(q);
   if (coords) return { label: q.trim(), detail: '', center: coords };
+  const linked = parseMapLink(q);
+  if (linked) return { label: formatLinkLabel(linked), detail: 'From a map link', center: linked };
   const params = new URLSearchParams({ q, format: 'jsonv2', limit: '1', addressdetails: '1' });
   const res = await fetch(`${NOMINATIM}/search?${params}`, { signal, headers: { 'Accept-Language': navigator.language || 'en' } });
   if (!res.ok) throw new Error(`Search failed (HTTP ${res.status})`);

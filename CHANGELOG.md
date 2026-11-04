@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0 — 2026-11-04
+
+From the first feedback after launch.
+
+### Search finds the right house
+- Enter only takes the top suggestion when it carries the house number you typed. Otherwise the full address goes to Nominatim, which handles exact addresses (and numbered avenues and streets) better. If it isn't in OpenStreetMap either, the closest match opens with a note to pin your building by hand.
+- Paste a map link from Google Maps, Apple Maps, OpenStreetMap or Bing, or a `geo:` link, and the model opens at that spot. Links and coordinates are no longer sent for suggestions.
+
+### A model to share
+- The start screen leads with the places that matter to people: the street you grew up on, where you met, the town you left.
+- Someone who opens a shared model is invited to make one of their own place.
+- Sharing from a phone adds "Make one of your own place" to the message, and the share dialog says plainly that a pinned link shows exactly that building.
+
 ## 1.0.0 — 2026-11-03
 
 First public release.
