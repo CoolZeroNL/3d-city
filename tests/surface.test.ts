@@ -80,4 +80,18 @@ describe('roof bumps in surface-model elevation data', () => {
     expect(r.applied).toBe(true);
     expect(sampleGrid(g, edge[0], edge[1])).toBeLessThan(12);
   });
+
+  it('lowers a podium under its neighbouring tower\'s bump', () => {
+    // a 20 m podium beside a 200 m tower; the radar saw the tower and left a 60 m bump over both
+    const podium = square(-200, 150, 50, 20);
+    const tower = square(-150, 150, 30, 200);
+    const g = grid((e, n) => 10 + roofs(e, n) + bump(e, n, -175, 150, 60, 30));
+    const before = sampleGrid(g, -200, 150);
+    const r = removeRoofBumps(g, [...halls, podium, tower]);
+    expect(r.applied).toBe(true);
+    // from about 52 m to within a few metres of street level (the tower's wide bump lifts the street ring a little)
+    expect(sampleGrid(g, -200, 150)).toBeLessThan(before - 30);
+    expect(sampleGrid(g, -200, 150)).toBeLessThan(20);
+    expect(r.remaining).toBeLessThan(r.bumped);
+  });
 });

@@ -39,6 +39,8 @@ export interface RoofBumpResult {
   lowered: number;
   /** largest lowering (m) */
   maxDrop: number;
+  /** of the large buildings, those still on a roof bump afterwards (same measure as `bumped`) */
+  remaining: number;
 }
 
 /** The highest bump a building of this height can leave in a surface model; anything higher is a real hill. */
@@ -46,9 +48,11 @@ export const roofCap = (height: number) => Math.max(height * 1.5, height + 15);
 
 interface Measured {
   ring: Pt[];
+  poly: Polygon;
   bbox: [number, number, number, number];
   ref: number;
   bump: number;
+  /** the tallest of this building and its close neighbours: a podium's bump can be its tower's roof */
   height: number;
   /** the ground keeps falling beyond the building: a real hill, not a roof */
   hill: boolean;
@@ -152,6 +156,36 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
   const h = sizeM / 2;
   const measured: Measured[] = [];
 
+  // the tallest building near each large one (a spatial hash of footprint middles, 100 m cells)
+  const CELL = 100;
+  const cells = new Map<string, { x: number; y: number; height: number }[]>();
+  const middle = (poly: Polygon): Pt => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of poly.outer) {
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    return [(x0 + x1) / 2, (y0 + y1) / 2];
+  };
+  for (const b of buildings) {
+    const [x, y] = middle(b.poly);
+    const key = `${Math.floor(x / CELL)},${Math.floor(y / CELL)}`;
+    const list = cells.get(key) ?? [];
+    list.push({ x, y, height: b.height });
+    cells.set(key, list);
+  }
+  const tallestNear = (x: number, y: number, radius: number) => {
+    let best = 0;
+    for (let gx = Math.floor((x - radius) / CELL); gx <= Math.floor((x + radius) / CELL); gx++) {
+      for (let gy = Math.floor((y - radius) / CELL); gy <= Math.floor((y + radius) / CELL); gy++) {
+        for (const o of cells.get(`${gx},${gy}`) ?? []) if (Math.hypot(o.x - x, o.y - y) <= radius) best = Math.max(best, o.height);
+      }
+    }
+    return best;
+  };
+
   for (const b of buildings) {
     const m = measureGround(grid, b.poly);
     if (!m || m.area < ROOF_MIN_AREA) continue;
@@ -163,11 +197,13 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
       x1 = Math.max(x1, x);
       y1 = Math.max(y1, y);
     }
-    measured.push({ ring, bbox: [x0, y0, x1, y1], ref: m.near, bump: m.bump, height: b.height, hill: m.hill });
+    const r = Math.sqrt(m.area / Math.PI);
+    const height = Math.max(b.height, tallestNear((x0 + x1) / 2, (y0 + y1) / 2, r + 60));
+    measured.push({ ring, poly: b.poly, bbox: [x0, y0, x1, y1], ref: m.near, bump: m.bump, height, hill: m.hill });
   }
 
   const bumped = measured.filter((m) => isRoof(m, ROOF_BUMP_M)).length;
-  const result: RoofBumpResult = { large: measured.length, bumped, applied: false, lowered: 0, maxDrop: 0 };
+  const result: RoofBumpResult = { large: measured.length, bumped, applied: false, lowered: 0, maxDrop: 0, remaining: bumped };
   if (bumped < ROOF_MIN_COUNT || bumped < measured.length * ROOF_SHARE) return result;
   result.applied = true;
 
@@ -196,5 +232,10 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
   let max = -Infinity;
   for (const v of elev) max = Math.max(max, v);
   grid.max = max;
+  // measure again, the same way, to report what is left
+  result.remaining = measured.filter((m) => {
+    const again = measureGround(grid, m.poly);
+    return !!again && isRoof({ ...m, bump: again.bump, hill: again.hill }, ROOF_BUMP_M);
+  }).length;
   return result;
 }
