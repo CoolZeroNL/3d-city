@@ -9,6 +9,8 @@ import type { Viewer } from '../scene/viewer';
 
 export interface PosterInfo {
   title: string;
+  /** an optional second line, e.g. "Where we met · June 2019" */
+  subtitle?: string;
   center: LngLat;
   sizeM: number;
   exaggeration: number;
@@ -50,12 +52,26 @@ export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400)
     ctx.font = `500 ${titleSize}px ${serif}`;
   }
   ctx.fillText(info.title, pad, y0 + footer * 0.1);
+  let y = y0 + footer * 0.1 + titleSize * 1.25;
+
+  const subtitle = info.subtitle?.trim();
+  if (subtitle) {
+    let subSize = Math.round(titleSize * 0.5);
+    ctx.font = `italic 400 ${subSize}px ${serif}`;
+    while (ctx.measureText(subtitle).width > W - 2 * pad && subSize > 14) {
+      subSize -= 2;
+      ctx.font = `italic 400 ${subSize}px ${serif}`;
+    }
+    ctx.fillStyle = '#3a352f';
+    ctx.fillText(subtitle, pad, y - titleSize * 0.12);
+    y += subSize * 1.3;
+  }
 
   ctx.fillStyle = '#5c564d';
   ctx.font = `450 ${Math.round(W * 0.019)}px ${sans}`;
   const km = info.sizeM / 1000;
   const meta = `${formatLatLon(info.center)}   ·   ${km} × ${km} km   ·   terrain ×${info.exaggeration.toFixed(1)}`;
-  ctx.fillText(meta, pad, y0 + footer * 0.1 + titleSize * 1.25);
+  ctx.fillText(meta, pad, y);
 
   ctx.fillStyle = '#8a8378';
   ctx.font = `400 ${Math.round(W * 0.0125)}px ${sans}`;

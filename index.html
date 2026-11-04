@@ -207,6 +207,16 @@
             <button type="button" class="btn" id="copy-btn">Copy link</button>
           </div>
           <button type="button" class="btn btn-wide" id="native-share-btn" hidden>Share…</button>
+          <div class="title-fields">
+            <div class="field">
+              <label for="print-title">Title on the poster and print</label>
+              <input id="print-title" type="text" maxlength="48" autocomplete="off" enterkeyhint="done" />
+            </div>
+            <div class="field">
+              <label for="print-subtitle">Second line <small>optional</small></label>
+              <input id="print-subtitle" type="text" maxlength="48" autocomplete="off" enterkeyhint="done" placeholder="Where we met · June 2019" />
+            </div>
+          </div>
           <button type="button" class="btn btn-wide btn-primary" id="poster-btn">Download poster (PNG)</button>
           <div class="print-block">
             <div class="control-label">
@@ -218,6 +228,7 @@
               <button type="button" role="radio" data-value="150" aria-checked="true">15 cm</button>
               <button type="button" role="radio" data-value="200" aria-checked="false" tabindex="-1">20 cm</button>
             </div>
+            <label class="check"><input type="checkbox" id="print-ledge" checked /> Raise the title on a ledge in front</label>
             <button type="button" class="btn btn-wide" id="stl-btn">Download 3D print file (STL)</button>
           </div>
           <p class="dialog-note" id="share-msg" role="status" aria-live="polite"></p>

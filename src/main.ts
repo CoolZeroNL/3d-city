@@ -9,6 +9,7 @@ import { HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
 import { AREA_SIZES, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl } from './export/stl';
+import { addLabel, loadGlyphs } from './export/label';
 import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
 import { NoticeView } from './ui/notice';
@@ -738,11 +739,22 @@ function bindShare(): void {
     updatePrintNote();
   });
 
+  // the title for poster and print: the place's name until the user writes their own
+  const titleInput = $<HTMLInputElement>('print-title');
+  const subtitleInput = $<HTMLInputElement>('print-subtitle');
+  let autoTitle = '';
+  const title = () => titleInput.value.trim() || autoTitle;
+  const subtitle = () => subtitleInput.value.trim();
+
   $('share-btn').addEventListener('click', () => {
     writeHash();
     url.value = location.href;
     msg.textContent = '';
     updatePrintNote();
+    const place = placeLabel || (state.center ? formatLatLon(state.center) : '');
+    if (!titleInput.value.trim() || titleInput.value === autoTitle) titleInput.value = place;
+    autoTitle = place;
+    titleInput.placeholder = place;
     dialog.showModal();
   });
 
@@ -770,9 +782,8 @@ function bindShare(): void {
     posterBtn.disabled = true;
     msg.textContent = 'Rendering poster…';
     try {
-      const title = placeLabel || formatLatLon(state.center);
-      const blob = await makePoster(viewer, { title, center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
-      saveBlob(blob, posterFileName(title, state.size));
+      const blob = await makePoster(viewer, { title: title(), subtitle: subtitle(), center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
+      saveBlob(blob, posterFileName(title(), state.size));
       msg.textContent = '';
       dialog.close();
       toast('Poster saved');
@@ -796,14 +807,20 @@ function bindShare(): void {
     msg.textContent = 'Building the 3D print file…';
     await new Promise((r) => window.setTimeout(r, 30)); // let the message show
     try {
-      const title = placeLabel || formatLatLon(state.center);
+      const name = title();
       const scale = printScale(state.size, printMm);
       const tris = buildPrint(model.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration });
-      const stl = toBinaryStl(tris, `${title}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
-      saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(title, state.size, `${printMm / 10}cm.stl`));
+      const brokenBuildings = tris.skipped;
+      // the title raised on a ledge in front of the model
+      const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
+      const stl = toBinaryStl(tris, `${name}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
+      saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${printMm / 10}cm.stl`));
       const mb = (stl.byteLength / 1048576).toFixed(stl.byteLength < 10485760 ? 1 : 0);
-      const left = tris.skipped ? ` ${tris.skipped} building${tris.skipped === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
-      msg.textContent = `Saved: ${printMm / 10} × ${printMm / 10} cm at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${left}`;
+      const depth = label ? Math.round(label.depthMm) : 0;
+      const size = depth ? `${printMm / 10} × ${(printMm + depth) / 10} cm with the title ledge` : `${printMm / 10} × ${printMm / 10} cm`;
+      const left = brokenBuildings ? ` ${brokenBuildings} building${brokenBuildings === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
+      const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
+      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${left}${missing}`;
     } catch (err) {
       console.error(err);
       msg.textContent = 'Couldn’t build the 3D print file on this device.';

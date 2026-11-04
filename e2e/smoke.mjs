@@ -321,25 +321,46 @@ try {
   await page.waitForSelector('#share-dialog[open]');
   await page.click('#print-size-group [data-value="100"]');
   expect(/^1:20,000 · terrain ×3\.0$/.test(await page.textContent('#print-note')), 'print size shows its scale and exaggeration');
-  const [stlDownload] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#stl-btn')]);
-  const stlPath = join(out, '06b-model.stl');
-  await stlDownload.saveAs(stlPath);
-  const stl = readFileSync(stlPath);
-  const triCount = stl.readUInt32LE(80);
-  const lo = [Infinity, Infinity, Infinity];
-  const hi = [-Infinity, -Infinity, -Infinity];
-  for (let k = 0; k < triCount; k++)
-    for (let q = 0; q < 9; q++) {
-      const v = stl.readFloatLE(84 + k * 50 + 12 + q * 4);
-      lo[q % 3] = Math.min(lo[q % 3], v);
-      hi[q % 3] = Math.max(hi[q % 3], v);
-    }
-  expect(stl.length === 84 + 50 * triCount && triCount > 50000, `STL downloaded (${stlDownload.suggestedFilename()}, ${triCount} triangles, ${(stl.length / 1048576).toFixed(1)} MB)`);
+  // a print file, and its size: x, y, z extents in mm
+  const printFile = async (name) => {
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#stl-btn')]);
+    const path = join(out, name);
+    await dl.saveAs(path);
+    const data = readFileSync(path);
+    const count = data.readUInt32LE(80);
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < count; k++)
+      for (let q = 0; q < 9; q++) {
+        const v = data.readFloatLE(84 + k * 50 + 12 + q * 4);
+        lo[q % 3] = Math.min(lo[q % 3], v);
+        hi[q % 3] = Math.max(hi[q % 3], v);
+      }
+    return { dl, data, count, lo, hi, size: [0, 1, 2].map((a) => hi[a] - lo[a]) };
+  };
+  expect((await page.inputValue('#print-title')).length > 0, 'the title field starts with the place name');
+  const plain = await printFile('06b-model.stl');
+  expect(plain.data.length === 84 + 50 * plain.count && plain.count > 50000, `STL downloaded (${plain.dl.suggestedFilename()}, ${plain.count} triangles, ${(plain.data.length / 1048576).toFixed(1)} MB)`);
   expect(
-    /-10cm\.stl$/.test(stlDownload.suggestedFilename()) && Math.abs(hi[0] - lo[0] - 100) < 0.01 && Math.abs(hi[1] - lo[1] - 100) < 0.01 && Math.abs(lo[2] + 3) < 1e-4 && hi[2] > 5,
-    `STL is 100 × 100 mm on a 3 mm base (${(hi[0] - lo[0]).toFixed(2)} × ${(hi[1] - lo[1]).toFixed(2)} × ${(hi[2] - lo[2]).toFixed(2)} mm)`,
+    /-10cm\.stl$/.test(plain.dl.suggestedFilename()) && Math.abs(plain.size[0] - 100) < 0.01 && plain.size[1] > 105 && plain.size[1] < 120 && Math.abs(plain.lo[2] + 3) < 1e-4 && plain.hi[2] > 5,
+    `STL is 100 mm wide on a 3 mm base, with the title ledge in front (${plain.size.map((v) => v.toFixed(2)).join(' × ')} mm)`,
   );
-  expect(/^Saved: 10 × 10 cm at 1:20,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the print file');
+  expect(/^Saved: 10 × 1\d(\.\d)? cm with the title ledge at 1:20,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the print file and its ledge');
+  // your own title and a second line make the ledge deeper and name the file
+  await page.fill('#print-title', 'Our first home');
+  await page.fill('#print-subtitle', 'Where we met · June 2019');
+  const titled = await printFile('06c-titled.stl');
+  expect(/^your-place-our-first-home-2km-10cm\.stl$/.test(titled.dl.suggestedFilename()) && titled.size[1] > plain.size[1] + 3, `your own title names the file and adds a second line (${titled.dl.suggestedFilename()}, ${titled.size[1].toFixed(1)} mm deep)`);
+  // without the ledge: the plain square again
+  await page.uncheck('#print-ledge');
+  const bare = await printFile('06d-no-ledge.stl');
+  expect(Math.abs(bare.size[0] - 100) < 0.01 && Math.abs(bare.size[1] - 100) < 0.01, `without the title the print is the plain square (${bare.size.map((v) => v.toFixed(2)).join(' × ')} mm)`);
+  await page.check('#print-ledge');
+  // the poster carries the title and the second line too
+  const [titledPoster] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#poster-btn')]);
+  expect(titledPoster.suggestedFilename() === 'your-place-our-first-home-2km.png', `the poster uses your own title (${titledPoster.suggestedFilename()})`);
+  await titledPoster.saveAs(join(out, '06e-titled-poster.png'));
+  await page.click('#share-btn');
   await page.keyboard.press('Escape');
 
   // reload from the link: same view

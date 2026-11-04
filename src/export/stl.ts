@@ -364,6 +364,14 @@ function repair(fp: Footprint): Footprint[] {
   }
 }
 
+/**
+ * A closed solid from an outline already in millimetres (the raised title and its ledge), built
+ * like the buildings: cleaned, repaired if needed, checked, and counted in `skipped` if hopeless.
+ */
+export function addSolid(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, inset = PRINT_SHELL_GAP_MM): void {
+  addPrism(t, poly, topZ, bottomZ, 1, inset);
+}
+
 /** A closed prism: walls, roof and floor. `inset` (mm) keeps it from touching its neighbours. */
 function addPrism(t: Triangles, poly: Polygon, topZ: number, bottomZ: number, s: number, inset: number): void {
   if (topZ <= bottomZ) return;
