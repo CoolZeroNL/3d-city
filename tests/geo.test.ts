@@ -3,7 +3,7 @@ import { heightFromTags, parseLength, resolveHeights, typeDefaultHeight } from '
 import { areaKind, buildingsQuery, lineClass, parseBuildings, parseFeatures, type OverpassResponse } from '../src/geo/osm';
 import { assembleRings, clipRingToRect, groupPolygons, pointInRing, signedArea, type Ring } from '../src/geo/polygon';
 import { lngLatToTile, makeProjector, squareBBox } from '../src/geo/projection';
-import { chooseZoom, contourInterval, decodeTerrarium, gridFromMosaic, sampleGrid, SEA_FLOOR } from '../src/geo/terrain';
+import { chooseZoom, contourInterval, decodeTerrarium, fillHoles, gridFromMosaic, sampleGrid, SEA_FLOOR } from '../src/geo/terrain';
 import { parseCoordinates, parseMapLink, photonLabel, suggestionFits, typedNumbers, type Place } from '../src/geo/geocode';
 
 const center = { lat: 52.2647, lon: 10.5236 };
@@ -284,5 +284,41 @@ describe('geocoding helpers', () => {
     expect(suggestionFits('Stuttgart', street)).toBe(true);
     expect(suggestionFits('70173', postcode)).toBe(true);
     expect(suggestionFits('Fifth Avenue New York', street)).toBe(true);
+  });
+});
+
+describe('elevation holes', () => {
+  // a gentle slope near sea level, with the kinds of holes the real tiles have and real features that must stay
+  const w = 96;
+  const h = 96;
+  const slope = (x: number, y: number) => 2 + x * 0.2 + y * 0.1;
+  const terrain = () => {
+    const d = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = slope(x, y);
+    return d;
+  };
+
+  it('fills small deep holes and keeps ravines, peaks and open sea', () => {
+    const d = terrain();
+    d[10 * w + 10] = -7972; // a single pixel thousands of metres down (Hong Kong waterfront)
+    for (let y = 30; y < 34; y++) for (let x = 30; x < 34; x++) d[y * w + x] = -500; // a 4×4 patch
+    for (let y = 5; y < 40; y++) for (let x = 60; x < 62; x++) d[y * w + x] = slope(x, y) - 25; // a ravine
+    d[20 * w + 20] = slope(20, 20) + 40; // a sharp peak
+    for (let y = 46; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = -2000; // open sea: 4,800 px
+    const filled = fillHoles(d, w, h);
+    expect(filled).toBe(1 + 16);
+    expect(Math.abs(d[10 * w + 10] - slope(10, 10))).toBeLessThan(2);
+    expect(Math.abs(d[32 * w + 32] - slope(32, 32))).toBeLessThan(2);
+    expect(d[20 * w + 60]).toBeCloseTo(slope(60, 20) - 25, 4);
+    expect(d[20 * w + 20]).toBeCloseTo(slope(20, 20) + 40, 4);
+    expect(d[80 * w + 50]).toBe(-2000);
+  });
+
+  it('leaves real terrain alone, however steep', () => {
+    const d = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = 1300 + ((x * 37 + y * 11) % 17) * 50; // cliffs and notches
+    const before = d.slice();
+    expect(fillHoles(d, w, h)).toBe(0);
+    expect(d).toEqual(before);
   });
 });

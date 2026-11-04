@@ -73,6 +73,63 @@ export interface Mosaic {
   data: Float32Array;
 }
 
+/** Holes: pixels this far below sea level (deeper than the -30 m sea floor the model keeps), in a patch ringed by land or shallow water, are data errors. */
+export const HOLE_BELOW_M = -40;
+/** Holes: patches up to this many pixels (about 400 m across at zoom 14); open water is far larger. */
+export const HOLE_MAX_PX = 4096;
+
+/**
+ * Fill the holes the elevation tiles have in a few places: waterfronts in Hong Kong and New York
+ * drop thousands of metres in patches of a few pixels, which shows as deep needles at any
+ * exaggeration. A patch of pixels below HOLE_BELOW_M that is small (HOLE_MAX_PX) and ringed by
+ * ground near or above sea level is filled with the median height of that ring. Real terrain
+ * (cliffs, gorges, lakes) and open sea are left as they are. Returns the number of pixels filled;
+ * changes `data` in place.
+ */
+export function fillHoles(data: Float32Array, w: number, h: number): number {
+  const seen = new Uint8Array(data.length);
+  const stack: number[] = [];
+  const members: number[] = [];
+  const ring: number[] = [];
+  let filled = 0;
+  for (let start = 0; start < data.length; start++) {
+    if (seen[start] || !(data[start] < HOLE_BELOW_M)) continue;
+    members.length = 0;
+    ring.length = 0;
+    stack.push(start);
+    seen[start] = 1;
+    while (stack.length) {
+      const i = stack.pop()!;
+      members.push(i);
+      const x = i % w;
+      const y = (i - x) / w;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if ((!dx && !dy) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (data[j] < HOLE_BELOW_M) {
+            if (!seen[j]) {
+              seen[j] = 1;
+              stack.push(j);
+            }
+          } else {
+            ring.push(data[j]);
+          }
+        }
+      }
+    }
+    if (members.length > HOLE_MAX_PX || !ring.length) continue;
+    ring.sort((a, b) => a - b);
+    const level = ring[ring.length >> 1];
+    if (level < HOLE_BELOW_M / 2) continue; // ringed by deep water: real bathymetry
+    for (const i of members) data[i] = level;
+    filled += members.length;
+  }
+  return filled;
+}
+
 /** Resample a mosaic into the model grid (pure; unit-tested). */
 export function gridFromMosaic(m: Mosaic, center: LngLat, sizeM: number, n: number): HeightGrid {
   const proj = makeProjector(center);
@@ -175,6 +232,7 @@ export async function loadHeightGrid(center: LngLat, sizeM: number, n: number, s
     }
   }
   await Promise.all(jobs);
+  fillHoles(data, width, rows * TILE);
   return gridFromMosaic({ z, tx0, ty0, cols, rows, data }, center, sizeM, n);
 }
 

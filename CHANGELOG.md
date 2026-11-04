@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-11-04
+
+- No more spikes in the terrain. The elevation data has small holes in a few places (Hong Kong's and New York's waterfronts drop thousands of metres in patches of a few pixels), which showed as deep needles at any exaggeration. Small patches far below sea level and ringed by land are now filled with the height around them; real cliffs, gorges and open water are left as they are.
+
 ## 1.1.0 — 2026-11-04
 
 From the first feedback after launch.
