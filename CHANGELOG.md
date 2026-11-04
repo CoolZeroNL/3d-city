@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3 — 2026-11-04
+
+- Large buildings no longer sit on hills of their own making. In some regions the free elevation data comes from radar satellites that see roofs, not the ground, so big buildings showed up as smooth bumps up to tens of metres high, with the real building on top. Where many large buildings sit on such bumps, the ground under them is now lowered to street level around them. In Singapore's centre this removes 55 of 71 roof bumps. Real hills stay: a bump much higher than the buildings around it, or one where the ground keeps falling further out, is left alone, so Edinburgh's castle rock and Salzburg's fortress hill are untouched, as is everywhere with bare-ground data (Germany, the US).
+
 ## 1.1.2 — 2026-11-04
 
 - No more needles in browsers with fingerprinting protection (Orion, Brave, Safari private windows and others). Those browsers add tiny random noise to images a page reads back, and the elevation tiles store height in their colours (one step of red is 256 m), so the whole terrain turned into spikes. The tiles are now decoded from their bytes instead of through a canvas, which gives exact heights in every browser.
