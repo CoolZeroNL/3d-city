@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       place:
-        description: The part of a share link after "#", e.g. lat=51.9244&lon=4.4778&km=4&ex=1.4
+        description: The part of a share link after "#" (several separated by spaces), e.g. lat=51.9244&lon=4.4778&km=4&ex=1.4
         required: false
         default: lat=51.9244&lon=4.4778&km=4&ex=1.4
       action:
@@ -55,6 +55,6 @@ jobs:
           cp -r inspect-out "$RUNNER_TEMP/inspect-out"
           git switch --orphan inspect
           cp "$RUNNER_TEMP"/inspect-out/* .
-          git add ./*.jpg ./stats.json
+          git add ./*.jpg ./*.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m 'Inspection'
           git push -f origin inspect
