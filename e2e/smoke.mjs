@@ -474,6 +474,30 @@ try {
   await shot(mp, '10-sheet-phone');
   await phone.close();
 
+  // ---------------- a browser that adds noise to canvas reads (Orion, Brave: fingerprinting protection)
+  const nctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await routeAll(nctx);
+  await nctx.addInitScript(() => {
+    for (const C of [globalThis.CanvasRenderingContext2D, globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!C) continue;
+      const read = C.prototype.getImageData;
+      C.prototype.getImageData = function (...args) {
+        const img = read.apply(this, args);
+        for (let i = 0; i < img.data.length; i++) if (Math.random() < 0.03) img.data[i] ^= 1;
+        return img;
+      };
+    }
+  });
+  const np = await nctx.newPage();
+  watchConsole(np, 'noisy canvas');
+  await np.goto(`${base}#lat=${PLACE.lat}&lon=${PLACE.lon}&km=2&ex=1.5`);
+  const tn = await waitStage(np, ['ready', 'error']);
+  expect(
+    tn.stage === 'ready' && Math.abs(tn.stats.minElev - t.stats.minElev) < 0.01 && Math.abs(tn.stats.maxElev - t.stats.maxElev) < 0.01,
+    `terrain is exact even when the browser adds noise to canvas reads (${Math.round(tn.stats.minElev)}–${Math.round(tn.stats.maxElev)} m)`,
+  );
+  await nctx.close();
+
   // ---------------- search: house numbers, map links, and the invitation on shared links
   const sctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await routeAll(sctx);

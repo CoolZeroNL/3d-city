@@ -6,6 +6,7 @@
  * The tiles are resampled into a regular N×N grid covering the model square.
  */
 
+import { decodePng } from './png';
 import { lngLatToTile, makeProjector, metresPerPixel, type LngLat } from './projection';
 
 export const TERRAIN_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
@@ -171,6 +172,17 @@ export function gridFromMosaic(m: Mosaic, center: LngLat, sizeM: number, n: numb
 }
 
 async function decodeTile(blob: Blob): Promise<Float32Array> {
+  // Decode the PNG bytes directly: reading pixels back from a canvas gets noise added in browsers
+  // with fingerprinting protection, and one unit of red is 256 m (see png.ts). The canvas stays
+  // as a fallback for browsers without DecompressionStream.
+  if (typeof DecompressionStream !== 'undefined') {
+    try {
+      const png = await decodePng(new Uint8Array(await blob.arrayBuffer()));
+      if (png.width === TILE && png.height === TILE) return heightsFromPixels(png.data, png.channels);
+    } catch (err) {
+      console.warn('terrain tile: falling back to canvas decoding', err);
+    }
+  }
   const bmp = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
   const canvas: OffscreenCanvas | HTMLCanvasElement =
     typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(TILE, TILE) : Object.assign(document.createElement('canvas'), { width: TILE, height: TILE });
@@ -178,9 +190,13 @@ async function decodeTile(blob: Blob): Promise<Float32Array> {
   if (!ctx) throw new Error('2D canvas unavailable');
   ctx.drawImage(bmp, 0, 0);
   bmp.close?.();
-  const px = ctx.getImageData(0, 0, TILE, TILE).data;
+  return heightsFromPixels(ctx.getImageData(0, 0, TILE, TILE).data, 4);
+}
+
+/** Terrarium heights from RGB(A) bytes. */
+export function heightsFromPixels(px: ArrayLike<number>, channels: number): Float32Array {
   const out = new Float32Array(TILE * TILE);
-  for (let k = 0, p = 0; k < out.length; k++, p += 4) out[k] = decodeTerrarium(px[p], px[p + 1], px[p + 2]);
+  for (let k = 0, p = 0; k < out.length; k++, p += channels) out[k] = decodeTerrarium(px[p], px[p + 1], px[p + 2]);
   return out;
 }
 

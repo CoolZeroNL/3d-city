@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — 2026-11-04
+
+- No more needles in browsers with fingerprinting protection (Orion, Brave, Safari private windows and others). Those browsers add tiny random noise to images a page reads back, and the elevation tiles store height in their colours (one step of red is 256 m), so the whole terrain turned into spikes. The tiles are now decoded from their bytes instead of through a canvas, which gives exact heights in every browser.
+- A tool for diagnosing odd-looking models: the "Inspect a place" workflow renders any place from live data and lists its tallest, thinnest and malformed buildings.
+
 ## 1.1.1 — 2026-11-04
 
 - No more spikes in the terrain. The elevation data has small holes in a few places (Hong Kong's and New York's waterfronts drop thousands of metres in patches of a few pixels), which showed as deep needles at any exaggeration. Small patches far below sea level and ringed by land are now filled with the height around them; real cliffs, gorges and open water are left as they are.
