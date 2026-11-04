@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { removeRoofBumps, type Footprint } from '../src/geo/surface';
+import { sampleGrid, type HeightGrid } from '../src/geo/terrain';
+
+const SIZE = 1000;
+const N = 129;
+
+/** A grid from a height function of local (east, north) metres. */
+function grid(f: (e: number, n: number) => number): HeightGrid {
+  const elev = new Float32Array(N * N);
+  const step = SIZE / (N - 1);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) elev[j * N + i] = f(-SIZE / 2 + i * step, -SIZE / 2 + j * step);
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of elev) {
+    min = Math.min(min, v);
+    max = Math.max(max, v);
+  }
+  return { n: N, sizeM: SIZE, elev, min, max, zoom: 15 };
+}
+
+const square = (cx: number, cy: number, w: number, height: number): Footprint => ({
+  poly: { outer: [[cx - w / 2, cy - w / 2], [cx + w / 2, cy - w / 2], [cx + w / 2, cy + w / 2], [cx - w / 2, cy + w / 2]], holes: [] },
+  height,
+});
+const bump = (e: number, n: number, cx: number, cy: number, top: number, sigma: number) => top * Math.exp(-((e - cx) ** 2 + (n - cy) ** 2) / (2 * sigma * sigma));
+
+// twelve 40 × 40 m buildings, 20 m tall, spread over the square
+const SPOTS: [number, number][] = [];
+for (const x of [-300, -100, 100, 300]) for (const y of [-300, 0, 300]) SPOTS.push([x, y]);
+const halls = SPOTS.map(([x, y]) => square(x, y, 40, 20));
+/** surface-model data: each hall leaves a smooth 18 m bump */
+const roofs = (e: number, n: number) => SPOTS.reduce((s, [x, y]) => s + bump(e, n, x, y, 18, 22), 0);
+
+describe('roof bumps in surface-model elevation data', () => {
+  it('lowers the ground under buildings where the data measured roofs', () => {
+    const g = grid((e, n) => 10 + roofs(e, n));
+    const r = removeRoofBumps(g, halls);
+    expect(r.applied).toBe(true);
+    expect(r.bumped).toBe(12);
+    for (const [x, y] of SPOTS) expect(sampleGrid(g, x, y)).toBeLessThan(11.5);
+    expect(sampleGrid(g, 200, 150)).toBeCloseTo(10, 3); // open ground between them is untouched
+  });
+
+  it('leaves bare-ground data alone, castle hill included', () => {
+    // flat ground with no bumps under the halls, and a castle on an 80 m hill
+    const hill = (e: number, n: number) => bump(e, n, 0, 150, 80, 90);
+    const g = grid((e, n) => 10 + hill(e, n));
+    const before = g.elev.slice();
+    const r = removeRoofBumps(g, [...halls, square(0, 150, 50, 20)]);
+    expect(r.applied).toBe(false);
+    expect(g.elev).toEqual(before);
+  });
+
+  it('keeps a real hill under a building even where the data measured roofs', () => {
+    const hill = (e: number, n: number) => bump(e, n, 0, 150, 80, 90);
+    const g = grid((e, n) => 10 + roofs(e, n) + hill(e, n));
+    const top = sampleGrid(g, 0, 150);
+    const r = removeRoofBumps(g, [...halls, square(0, 150, 50, 20)]);
+    expect(r.applied).toBe(true);
+    expect(sampleGrid(g, 0, 150)).toBeCloseTo(top, 3); // 80 m is no roof of a 20 m castle
+  });
+
+  it('handles a town on a slope: no roofs, no change; roofs, removed', () => {
+    const slope = (e: number, n: number) => 100 + 0.1 * e + 0.05 * n; // a 10% hillside
+    const plain = grid(slope);
+    const before = plain.elev.slice();
+    expect(removeRoofBumps(plain, halls).applied).toBe(false);
+    expect(plain.elev).toEqual(before);
+
+    const roofed = grid((e, n) => slope(e, n) + roofs(e, n));
+    expect(removeRoofBumps(roofed, halls).applied).toBe(true);
+    for (const [x, y] of SPOTS) expect(Math.abs(sampleGrid(roofed, x, y) - slope(x, y))).toBeLessThan(3);
+  });
+});

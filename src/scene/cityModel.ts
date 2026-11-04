@@ -10,6 +10,7 @@ import { centroid, pointInRing, signedArea, type Polygon, type Pt } from '../geo
 import { isEstimated, resolveHeights } from '../geo/heights';
 import { computeSeaMask, isSea, seaMaskFromPolygons, seaShare, type SeaMask } from '../geo/sea';
 import { contourInterval, sampleGrid, type HeightGrid } from '../geo/terrain';
+import { removeRoofBumps, type RoofBumpResult } from '../geo/surface';
 import type { BuildingStyle, Layers } from '../state';
 import {
   applyBuildingStyle,
@@ -55,6 +56,8 @@ export class CityModel {
   readonly overlay: Overlay;
   private buildings: { build: BuildingsBuild; mesh: Mesh<BufferGeometry, MeshStandardMaterial> } | null = null;
   private specs: BuildingSpec[] = [];
+  /** what removeRoofBumps found when the buildings arrived (for tools/inspect) */
+  private roofBumps: RoofBumpResult | null = null;
   private features: FeatureSet | null = null;
   private readonly pin: Group;
   private readonly accent: Color;
@@ -113,6 +116,12 @@ export class CityModel {
   /** Buildings with heights already decided (vector tiles carry them). */
   setBuildingSpecs(specs: BuildingSpec[]): void {
     this.clearBuildings();
+    // where the elevation data measured roofs, take the buildings back out of the ground first
+    this.roofBumps = removeRoofBumps(this.grid, specs);
+    if (this.roofBumps.lowered) {
+      this.uniforms.uInterval.value = contourInterval(this.grid.max - this.grid.min);
+      this.setExaggeration(this.exaggeration);
+    }
     const lowest = (poly: Polygon) => {
       let m = Infinity;
       for (const [e, n] of poly.outer) m = Math.min(m, sampleGrid(this.grid, e, n));
@@ -313,6 +322,7 @@ export class CityModel {
       .sort((a, c) => c.bump - a.bump);
     const median = (v: number[]) => (v.length ? [...v].sort((a, c) => a - c)[v.length >> 1] : 0);
     return {
+      roofBumps: this.roofBumps,
       groundBumps: {
         large: bumps.length,
         over3m: bumps.filter((x) => x.bump > 3).length,
