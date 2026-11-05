@@ -125,7 +125,9 @@ export function setupSearch(o: SearchOptions): void {
       const place = await searchOnce(q);
       if (place) {
         o.input.blur();
-        return o.onPick(place);
+        o.onPick(place);
+        if (place.streetOnly) o.onNote('That house number isn’t in OpenStreetMap, so this opens on its street. Slide the model and tap your building to pin it.');
+        return;
       }
       if (closest) {
         choose(closest);

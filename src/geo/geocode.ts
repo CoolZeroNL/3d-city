@@ -19,6 +19,8 @@ export interface Place {
   settlement?: string;
   /** the house number, when the result is an address */
   housenumber?: string;
+  /** the house number wasn't found, so this is its street */
+  streetOnly?: boolean;
 }
 
 export const KIND_LABEL: Record<PlaceKind, string> = {
@@ -248,11 +250,53 @@ export async function resolveToSettlement(p: Place, signal?: AbortSignal): Promi
   return { ...best.h, detail: [context, region].filter(Boolean).join(' · ') };
 }
 
-export async function searchOnce(q: string, signal?: AbortSignal): Promise<Place | null> {
-  const coords = parseCoordinates(q);
-  if (coords) return { label: q.trim(), detail: '', center: coords };
-  const linked = parseMapLink(q);
-  if (linked) return { label: formatLinkLabel(linked), detail: 'From a map link', center: linked };
+/** An address without what trips the search up: unit numbers, ZIP+4, a trailing country. */
+export function cleanAddress(q: string): string {
+  return q
+    // a unit is a designator and a number or a single letter ("Apt 2", "Suite 300", "Unit B");
+    // not "United", "Ste-Foy" or "FL 32801"
+    .replace(/[,\s]*\b(apt|apartment|unit|suite|ste|lot|bldg|building|floor|rm|room)\b\.?\s*#?\s*(?:[\w-]*\d[\w-]*|[a-z])\b/gi, '')
+    .replace(/[,\s]*#\s*[\w-]+/g, '')
+    .replace(/\b(\d{5})-\d{4}\b/, '$1')
+    .replace(/[,\s]*\b(usa|u\.s\.a\.|united states( of america)?)\s*$/i, '')
+    .replace(/\s+,/g, ',')
+    .replace(/,\s*,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * What to ask Nominatim, in order, until something is found: the address as typed; without unit,
+ * ZIP+4 and country; the street with only its ZIP code (US postal towns often aren't the town
+ * the map puts the house in); then the street without the house number, when the number isn't in
+ * the data (common for rural addresses).
+ */
+export function searchVariants(q: string): { q: string; streetOnly: boolean }[] {
+  const out: { q: string; streetOnly: boolean }[] = [];
+  const add = (v: string, streetOnly = false) => {
+    if (v && /\p{L}{2,}/u.test(v) && !out.some((o) => o.q.toLowerCase() === v.toLowerCase())) out.push({ q: v, streetOnly });
+  };
+  add(q.trim());
+  if (!typedNumbers(q).length) return out; // a place name: nothing to take apart
+  const clean = cleanAddress(q);
+  add(clean);
+  const parts = clean.split(',').map((x) => x.trim()).filter(Boolean);
+  const zip = /\b(\d{5})\s*$/.exec(clean)?.[1];
+  if (zip && parts.length > 2) add(`${parts[0]}, ${zip}`);
+  // the street: the house number leads ("350 5th Avenue") or trails ("Hauptstraße 12")
+  const first = parts[0] ?? '';
+  const street = /^\d+[a-z]?\s+(?=\S)/i.test(first) ? first.replace(/^\d+[a-z]?\s+/i, '') : first.replace(/\s+\d+[a-z]?$/i, '');
+  if (street !== first) add([street, ...parts.slice(1)].join(', '), true);
+  return out;
+}
+
+/** Nominatim allows a request a second; a search may try a few variants in a row. */
+let lastNominatim = 0;
+async function nominatimSearch(q: string, signal?: AbortSignal) {
+  const wait = lastNominatim + 1100 - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  signal?.throwIfAborted();
+  lastNominatim = Date.now();
   const params = new URLSearchParams({ q, format: 'jsonv2', limit: '1', addressdetails: '1' });
   const res = await fetch(`${NOMINATIM}/search?${params}`, { signal, headers: { 'Accept-Language': navigator.language || 'en' } });
   if (!res.ok) throw new Error(`Search failed (HTTP ${res.status})`);
@@ -265,13 +309,25 @@ export async function searchOnce(q: string, signal?: AbortSignal): Promise<Place
     type?: string;
     address?: Record<string, string>;
   }>;
-  const hit = json[0];
-  if (!hit) return null;
-  const [first, ...rest] = hit.display_name.split(', ');
-  const kind = placeKind({ osm_key: hit.category, osm_value: hit.type, housenumber: hit.address?.house_number });
-  const a = hit.address ?? {};
-  const settlement = kind === 'postcode' || kind === 'area' ? a.village || a.town || a.city || a.hamlet || a.suburb : undefined;
-  return { label: hit.name || first, detail: rest.slice(0, 3).join(', '), center: { lat: Number(hit.lat), lon: Number(hit.lon) }, kind, settlement };
+  return json[0] ?? null;
+}
+
+export async function searchOnce(q: string, signal?: AbortSignal): Promise<Place | null> {
+  const coords = parseCoordinates(q);
+  if (coords) return { label: q.trim(), detail: '', center: coords };
+  const linked = parseMapLink(q);
+  if (linked) return { label: formatLinkLabel(linked), detail: 'From a map link', center: linked };
+  for (const v of searchVariants(q)) {
+    const hit = await nominatimSearch(v.q, signal);
+    if (!hit) continue;
+    const [first, ...rest] = hit.display_name.split(', ');
+    const kind = placeKind({ osm_key: hit.category, osm_value: hit.type, housenumber: hit.address?.house_number });
+    const a = hit.address ?? {};
+    const settlement = kind === 'postcode' || kind === 'area' ? a.village || a.town || a.city || a.hamlet || a.suburb : undefined;
+    const place: Place = { label: hit.name || first, detail: rest.slice(0, 3).join(', '), center: { lat: Number(hit.lat), lon: Number(hit.lon) }, kind, settlement };
+    return v.streetOnly ? { ...place, streetOnly: true } : place;
+  }
+  return null;
 }
 
 /** Name for a coordinate (used when a model is opened from a shared link, which holds coordinates only). */

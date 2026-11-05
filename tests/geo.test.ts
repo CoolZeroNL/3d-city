@@ -4,7 +4,7 @@ import { areaKind, buildingsQuery, lineClass, parseBuildings, parseFeatures, typ
 import { assembleRings, clipRingToRect, groupPolygons, pointInRing, signedArea, type Ring } from '../src/geo/polygon';
 import { lngLatToTile, makeProjector, squareBBox } from '../src/geo/projection';
 import { chooseZoom, contourInterval, decodeTerrarium, fillHoles, gridFromMosaic, sampleGrid, SEA_FLOOR } from '../src/geo/terrain';
-import { offerTyped, parseCoordinates, parseMapLink, photonLabel, suggestionFits, typedNumbers, type Place } from '../src/geo/geocode';
+import { cleanAddress, offerTyped, parseCoordinates, searchVariants, parseMapLink, photonLabel, suggestionFits, typedNumbers, type Place } from '../src/geo/geocode';
 
 const center = { lat: 52.2647, lon: 10.5236 };
 
@@ -284,6 +284,28 @@ describe('geocoding helpers', () => {
     expect(suggestionFits('Stuttgart', street)).toBe(true);
     expect(suggestionFits('70173', postcode)).toBe(true);
     expect(suggestionFits('Fifth Avenue New York', street)).toBe(true);
+  });
+
+  it('cleans what trips the exact search up: units, ZIP+4, the country', () => {
+    expect(cleanAddress('3764 Elvis Presley Blvd Apt 2, Memphis, TN 38116-4106, USA')).toBe('3764 Elvis Presley Blvd, Memphis, TN 38116');
+    expect(cleanAddress('12 Main St #4B, Franklin, TN 37064')).toBe('12 Main St, Franklin, TN 37064');
+    expect(cleanAddress('500 Church St, Suite 300, Nashville, TN 37219, United States')).toBe('500 Church St, Nashville, TN 37219');
+    expect(cleanAddress('Hauptstraße 12, 70173 Stuttgart')).toBe('Hauptstraße 12, 70173 Stuttgart');
+    expect(cleanAddress('100 Main St Unit B, Orlando, FL 32801')).toBe('100 Main St, Orlando, FL 32801');
+    expect(cleanAddress('2500 Ch. Sainte-Foy, Ste-Foy, QC')).toBe('2500 Ch. Sainte-Foy, Ste-Foy, QC');
+  });
+
+  it('tries the address as typed, then cleaned, then by street and ZIP, then the street alone', () => {
+    expect(searchVariants('3764 Elvis Presley Blvd Apt 2, Memphis, TN 38116-4106, USA')).toEqual([
+      { q: '3764 Elvis Presley Blvd Apt 2, Memphis, TN 38116-4106, USA', streetOnly: false },
+      { q: '3764 Elvis Presley Blvd, Memphis, TN 38116', streetOnly: false },
+      { q: '3764 Elvis Presley Blvd, 38116', streetOnly: false },
+      { q: 'Elvis Presley Blvd, Memphis, TN 38116', streetOnly: true },
+    ]);
+    // a number in the street's name stays: "10 Ave" is the street
+    expect(searchVariants('1234 10 Ave SW, Calgary').map((v) => v.q)).toEqual(['1234 10 Ave SW, Calgary', '10 Ave SW, Calgary']);
+    expect(searchVariants('Hauptstraße 12, Stuttgart').map((v) => v.q)).toEqual(['Hauptstraße 12, Stuttgart', 'Hauptstraße, Stuttgart']);
+    expect(searchVariants('Heidelberg')).toEqual([{ q: 'Heidelberg', streetOnly: false }]);
   });
 
   it('offers the typed address first when the suggestions only guess at it', () => {
