@@ -12,6 +12,11 @@
 
 ### Search takes you literally
 - When the suggestions don't carry the house number you typed, the first row is now your address exactly as typed, above the type-ahead guesses ("10 St" for "10 Ave"). Picking it, or pressing Enter, searches the exact text.
+- An address that isn't found as typed is tried again without its unit ("Apt 2", "Suite 300"), ZIP+4 and country, then by street and ZIP code. If the house number isn't in OpenStreetMap at all, which is common for rural addresses, the model opens on its street with a note to pin your house, instead of "Nothing found".
+
+### Fewer hills that are really roofs
+- Where the elevation data measured roofs (Anchorage, Singapore and others), buildings without a height in OpenStreetMap were still sitting inside hills of their own roofs: the map tiles give them 5 m, and a 24 m bump looked too tall to be their roof. They now come back out of the ground, and take their height from the roof the data measured. In downtown Anchorage, bumps over 8 m under large buildings go from 7 to none, and 59 buildings get a measured height.
+- A building near a bluff is no longer mistaken for one on a hill: a real hill falls away in nearly every direction, a bluff on one side. Downtown Anchorage sits on one above Ship Creek.
 
 ## 1.1.3 — 2026-11-04
 
