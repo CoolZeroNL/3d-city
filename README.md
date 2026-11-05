@@ -15,7 +15,7 @@ works on your phone.**
 
 - **Search anything:** an address, a street, a village, a postcode or `lat, lon`, or use your location.
   Postcode and county results land on their village, not in a field.
-- **See it in 3D:** the 1, 2 or 4 km around it, with terrain you can exaggerate (1×–5×) and contour lines.
+- **See it in 3D:** the 1, 2 or 4 km around it, with terrain you can exaggerate (1×–10×, for flat places too) and contour lines.
   Buildings stand at their mapped height; where none is mapped the app estimates it and says how many.
 - **Find a house:** slide the plate, tap a building to pin it, and “Centre here” to rebuild the square around it,
   or double-tap / double-click a spot to load the area there in one go.

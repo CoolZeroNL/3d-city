@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-11-05
+
+- Terrain exaggeration now goes up to 10×, so flat places show their relief too. A 3D print taller than 15 cm says so when it's saved, in case that's too tall for your printer.
+
 ## 1.2.0 — 2026-11-05
 
 ### Your own title

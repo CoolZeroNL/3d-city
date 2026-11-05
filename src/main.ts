@@ -861,7 +861,16 @@ function bindShare(): void {
       const size = depth ? `${printMm / 10} × ${(printMm + depth) / 10} cm with the title ledge` : `${printMm / 10} × ${printMm / 10} cm`;
       const left = brokenBuildings ? ` ${brokenBuildings} building${brokenBuildings === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
       const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${left}${missing}`;
+      // strong exaggeration on hilly ground can make a print taller than most printers take
+      let zMin = Infinity;
+      let zMax = -Infinity;
+      for (let i = 2; i < tris.count * 9; i += 3) {
+        zMin = Math.min(zMin, tris.data[i]);
+        zMax = Math.max(zMax, tris.data[i]);
+      }
+      const tallCm = (zMax - zMin) / 10;
+      const tall = tallCm > 15 ? ` It is ${Math.round(tallCm)} cm tall at terrain ×${state.exaggeration.toFixed(1)}: lower the exaggeration if that’s too tall for your printer.` : '';
+      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${left}${missing}${tall}`;
     } catch (err) {
       console.error(err);
       msg.textContent = 'Couldn’t build the 3D print file on this device.';
