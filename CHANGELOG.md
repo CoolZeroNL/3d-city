@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0 — 2026-11-05
+
+### Your own title
+- Give the poster your own title and an optional second line ("Where we met · June 2019"). It starts as the place's name; the file is named after it.
+- The 3D print can carry the same title in raised letters on a ledge in front of the model (on by default, untick it for a plain square). The letters scale to the print size, shrink to fit a long title, and every one of its 328 characters (Latin letters with their accents, digits, punctuation) is checked to print as a closed solid. Inter Bold, under the SIL Open Font License.
+
+### Easier to move around
+- Double-click (computer) or double-tap (phone) a spot to load the area around it in one go, instead of pinning it and pressing "Centre here".
+- On a computer, a small hint shows the mouse controls until you close it: drag to turn, right-drag to slide, double-click to load the area there.
+
+### Search takes you literally
+- When the suggestions don't carry the house number you typed, the first row is now your address exactly as typed, above the type-ahead guesses ("10 St" for "10 Ave"). Picking it, or pressing Enter, searches the exact text.
+
 ## 1.1.3 — 2026-11-04
 
 - Large buildings no longer sit on hills of their own making. In some regions the free elevation data comes from radar satellites that see roofs, not the ground, so big buildings showed up as smooth bumps up to tens of metres high, with the real building on top. Where many large buildings sit on such bumps, the ground under them is now lowered to street level around them. In Singapore's centre this removes 55 of 71 roof bumps. Real hills stay: a bump much higher than the buildings around it, or one where the ground keeps falling further out, is left alone, so Edinburgh's castle rock and Salzburg's fortress hill are untouched, as is everywhere with bare-ground data (Germany, the US).
