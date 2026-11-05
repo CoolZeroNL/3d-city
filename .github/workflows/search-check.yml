@@ -1,0 +1,34 @@
+name: Check address search
+
+# Prints what the search services (Photon for suggestions, Nominatim for Enter) return for some
+# addresses, with tools/inspect/search.mjs, for reports like "my address isn't found". Read the
+# result in the job log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      queries:
+        description: Addresses separated by |
+        required: true
+        default: 3764 Elvis Presley Blvd, Memphis, TN 38116
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Ask the search services
+        env:
+          SEARCH_QUERIES: ${{ inputs.queries }}
+        run: node tools/inspect/search.mjs
