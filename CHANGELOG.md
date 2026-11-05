@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0 — 2026-11-05
+
+Both suggested on Reddit.
+
+### Any area, from 300 m to 4 km
+- The area is a slider now, from 300 m to 4 km in 100 m steps, instead of 1, 2 or 4 km. Share links carry the exact size; older links still work.
+- Small areas print with much bigger houses: 500 m on a 15 cm print is 1:3,330, so a 10 m house stands 3 mm tall.
+
+### 3D prints in tiles
+- Split the print into 2 × 2, 3 × 3 or 4 × 4 tiles that fit your print bed. Each tile is the print size you pick, so 3 × 3 tiles of 20 cm make a 60 cm model.
+- The download is a ZIP: one STL per tile, named like a map grid (A1 is the north-west corner), the title ledge as its own piece, and a note on how they go together.
+- The tiles fit edge to edge on one base, and buildings are cut exactly at the seams. Every tile is checked to print as closed solids.
+
 ## 1.2.0 — 2026-11-05
 
 ### Your own title
