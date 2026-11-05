@@ -1148,3 +1148,7 @@ input[type='range'] {
     animation-duration: 0.001s !important;
   }
 }
+
+.print-block .tiles-label {
+  margin-top: 6px;
+}

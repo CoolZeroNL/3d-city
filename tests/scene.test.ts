@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Color, Vector3 } from 'three';
 import { applyBuildingStyle, buildBuildings, buildingOfVertex, buildingsAt, paintBuildings, rampColor, setBuildingsExaggeration } from '../src/scene/buildingsMesh';
 import { withOrientation, type Polygon } from '../src/geo/polygon';
-import { decodeState, DEFAULT_STATE, encodeState, type ViewState } from '../src/state';
+import { decodeState, DEFAULT_STATE, encodeState, formatArea, type ViewState } from '../src/state';
 
 const box = (x: number, y: number, w: number, d: number): Polygon => ({
   outer: withOrientation(
@@ -141,6 +141,17 @@ describe('view state URL', () => {
   it('rejects bad input and clamps values', () => {
     expect(decodeState('#lat=abc&lon=1').center).toBeNull();
     expect(decodeState('#lat=10&lon=10&ex=50').exaggeration).toBe(5);
-    expect(decodeState('#lat=10&lon=10&km=3').size).toBe(2000);
+    expect(decodeState('#lat=10&lon=10&km=abc').size).toBe(2000);
+  });
+
+  it('takes any area from 300 m to 4 km in 100 m steps, old links included', () => {
+    const size = (km: string) => decodeState(`#lat=10&lon=10&km=${km}`).size;
+    expect([size('1'), size('2'), size('4')]).toEqual([1000, 2000, 4000]);
+    expect([size('1.5'), size('0.3'), size('3.7')]).toEqual([1500, 300, 3700]);
+    expect([size('1.23'), size('0.1'), size('9')]).toEqual([1200, 300, 4000]);
+    const s: ViewState = { ...DEFAULT_STATE, center: { lat: 1, lon: 2 }, size: 1500 };
+    expect(encodeState(s)).toContain('km=1.5');
+    expect(decodeState(encodeState({ ...s, size: 500 })).size).toBe(500);
+    expect([formatArea(500), formatArea(1500), formatArea(2000)]).toEqual(['500 × 500 m', '1.5 × 1.5 km', '2 × 2 km']);
   });
 });

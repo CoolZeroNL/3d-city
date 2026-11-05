@@ -44,7 +44,7 @@
         "image": "%SITE_URL%og.jpg",
         "screenshot": "%SITE_URL%og.jpg",
         "featureList": [
-          "3D model of the 1, 2 or 4 km around any address",
+          "3D model of any square from 300 m to 4 km around an address",
           "Real terrain with adjustable exaggeration and contour lines",
           "Buildings at their mapped height",
           "Pin a house and share a link to it",
@@ -167,12 +167,12 @@
           </div>
 
           <div class="control">
-            <div class="control-label"><span id="size-label">Area</span></div>
-            <div class="segmented" role="radiogroup" aria-labelledby="size-label" id="size-group">
-              <button type="button" role="radio" data-value="1000" aria-checked="false">1 km</button>
-              <button type="button" role="radio" data-value="2000" aria-checked="true">2 km</button>
-              <button type="button" role="radio" data-value="4000" aria-checked="false">4 km</button>
+            <div class="control-label">
+              <label for="size-range">Area</label>
+              <output id="size-out" for="size-range">2 × 2 km</output>
             </div>
+            <input type="range" id="size-range" min="300" max="4000" step="100" value="2000" list="size-ticks" />
+            <datalist id="size-ticks"><option value="1000"></option><option value="2000"></option><option value="4000"></option></datalist>
           </div>
 
           <div class="control">
@@ -234,6 +234,13 @@
               <button type="button" role="radio" data-value="100" aria-checked="false" tabindex="-1">10 cm</button>
               <button type="button" role="radio" data-value="150" aria-checked="true">15 cm</button>
               <button type="button" role="radio" data-value="200" aria-checked="false" tabindex="-1">20 cm</button>
+            </div>
+            <div class="control-label tiles-label"><span id="tiles-label">Split into tiles that fit your print bed</span></div>
+            <div class="segmented" role="radiogroup" aria-labelledby="tiles-label" id="print-tiles-group">
+              <button type="button" role="radio" data-value="1" aria-checked="true">One piece</button>
+              <button type="button" role="radio" data-value="2" aria-checked="false" tabindex="-1">2 × 2</button>
+              <button type="button" role="radio" data-value="3" aria-checked="false" tabindex="-1">3 × 3</button>
+              <button type="button" role="radio" data-value="4" aria-checked="false" tabindex="-1">4 × 4</button>
             </div>
             <label class="check"><input type="checkbox" id="print-ledge" checked /> Raise the title on a ledge in front</label>
             <button type="button" class="btn btn-wide" id="stl-btn">Download 3D print file (STL)</button>

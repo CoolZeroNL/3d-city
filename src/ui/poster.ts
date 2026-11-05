@@ -5,6 +5,7 @@
  */
 
 import { formatLatLon, type LngLat } from '../geo/projection';
+import { formatArea } from '../state';
 import type { Viewer } from '../scene/viewer';
 
 export interface PosterInfo {
@@ -69,8 +70,7 @@ export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400)
 
   ctx.fillStyle = '#5c564d';
   ctx.font = `450 ${Math.round(W * 0.019)}px ${sans}`;
-  const km = info.sizeM / 1000;
-  const meta = `${formatLatLon(info.center)}   ·   ${km} × ${km} km   ·   terrain ×${info.exaggeration.toFixed(1)}`;
+  const meta = `${formatLatLon(info.center)}   ·   ${formatArea(info.sizeM)}   ·   terrain ×${info.exaggeration.toFixed(1)}`;
   ctx.fillText(meta, pad, y);
 
   ctx.fillStyle = '#8a8378';
@@ -94,5 +94,6 @@ export function exportFileName(title: string, sizeM: number, suffix: string): st
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 48);
-  return `your-place-${slug || 'model'}-${sizeM / 1000}km${suffix.includes('.') ? '-' : '.'}${suffix}`;
+  const size = sizeM < 1000 ? `${sizeM}m` : `${Number((sizeM / 1000).toFixed(1))}km`;
+  return `your-place-${slug || 'model'}-${size}${suffix.includes('.') ? '-' : '.'}${suffix}`;
 }

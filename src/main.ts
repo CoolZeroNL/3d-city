@@ -7,8 +7,10 @@ import { loadHeightGrid } from './geo/terrain';
 import { CityModel } from './scene/cityModel';
 import { HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
-import { AREA_SIZES, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
-import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl } from './export/stl';
+import { clampSize, decodeState, encodeState, formatArea, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
+import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
+import { buildTiledPrint, tileName } from './export/tiles';
+import { makeZip, type ZipEntry } from './export/zip';
 import { addLabel, loadGlyphs } from './export/label';
 import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
@@ -141,7 +143,7 @@ function overlayPixels(size: number): number {
 }
 
 function gridResolution(size: number): number {
-  return size >= 4000 && !viewer.small ? 385 : 257;
+  return size > 2500 && !viewer.small ? 385 : 257;
 }
 
 /** Overpass is only the fallback; don't let a struggling mirror hold the model for minutes. */
@@ -239,8 +241,9 @@ async function offerNearby(center: LngLat, size: AreaSize, count: number, stale:
   ]);
 }
 
-function setSize(size: AreaSize): void {
-  if (!AREA_SIZES.includes(size) || size === state.size) return;
+function setSize(want: AreaSize): void {
+  const size = clampSize(want);
+  if (size === state.size) return;
   state.size = size;
   syncControls();
   if (state.center) void loadPlace(state.center, { label: placeLabel || undefined, detail: placeMetaDetail });
@@ -553,8 +556,7 @@ function setPlaceTitle(title: string, detail: string): void {
 
 let placeMetaDetail = '';
 function updateMeta(): void {
-  const km = state.size / 1000;
-  const parts = [placeMetaDetail, `${km} × ${km} km`, `terrain ×${state.exaggeration.toFixed(1)}`].filter(Boolean);
+  const parts = [placeMetaDetail, formatArea(state.size), `terrain ×${state.exaggeration.toFixed(1)}`].filter(Boolean);
   $('place-meta').textContent = parts.join(' · ');
 }
 
@@ -598,7 +600,14 @@ function bindControls(): void {
     scheduleHashWrite();
   });
 
-  radioGroup('size-group', (v) => setSize(Number(v) as AreaSize));
+  // the area: the readout follows the slider, the model loads when it's let go (a pause for keys)
+  const sizeRange = $<HTMLInputElement>('size-range');
+  let sizeTimer = 0;
+  sizeRange.addEventListener('input', () => ($('size-out').textContent = formatArea(clampSize(Number(sizeRange.value)))));
+  sizeRange.addEventListener('change', () => {
+    window.clearTimeout(sizeTimer);
+    sizeTimer = window.setTimeout(() => setSize(Number(sizeRange.value)), 350);
+  });
 
   for (const chip of $('layers-group').querySelectorAll<HTMLButtonElement>('[data-layer]')) {
     chip.addEventListener('click', () => {
@@ -643,10 +652,9 @@ function syncControls(): void {
   ex.value = String(state.exaggeration);
   $('ex-out').textContent = `×${state.exaggeration.toFixed(1)}`;
   $('contour-switch').setAttribute('aria-checked', String(state.contours));
-  for (const [id, value] of [
-    ['style-group', state.style],
-    ['size-group', String(state.size)],
-  ] as const) {
+  $<HTMLInputElement>('size-range').value = String(state.size);
+  $('size-out').textContent = formatArea(state.size);
+  for (const [id, value] of [['style-group', state.style]] as const) {
     for (const b of $(id).querySelectorAll<HTMLButtonElement>('[role="radio"]')) {
       const on = b.dataset.value === value;
       b.setAttribute('aria-checked', String(on));
@@ -706,10 +714,9 @@ function describe(): void {
   if (!model) return;
   const s = model.stats();
   const nf = new Intl.NumberFormat();
-  const km = state.size / 1000;
   const relief = Math.round(s.maxElev - s.minElev);
   const lines = [
-    `${km} × ${km} km ${placeLabel.startsWith('Near ') ? `near ${placeLabel.slice(5)}` : `around ${placeLabel || 'this point'}`}.`,
+    `${formatArea(state.size)} ${placeLabel.startsWith('Near ') ? `near ${placeLabel.slice(5)}` : `around ${placeLabel || 'this point'}`}.`,
     `Ground from ${Math.round(s.minElev)} m to ${Math.round(s.maxElev)} m above sea level (${relief} m of relief).`,
   ];
   if (model.hasBuildings) {
@@ -772,11 +779,20 @@ function bindShare(): void {
   nativeBtn.hidden = typeof navigator.share !== 'function';
 
   let printMm = 150;
+  let printTiles = 1;
   const updatePrintNote = () => {
-    $('print-note').textContent = `${printScale(state.size, printMm)} · terrain ×${state.exaggeration.toFixed(1)}`;
+    const scale = `${printScale(state.size, printMm * printTiles)} · terrain ×${state.exaggeration.toFixed(1)}`;
+    const total = (printMm * printTiles) / 10;
+    $('print-label').textContent = printTiles > 1 ? 'Size of each tile' : '3D print size';
+    $('print-note').textContent = printTiles > 1 ? `${printTiles * printTiles} tiles, ${total} × ${total} cm in all · ${scale}` : scale;
+    $('stl-btn').textContent = printTiles > 1 ? 'Download 3D print tiles (ZIP of STL files)' : 'Download 3D print file (STL)';
   };
   radioGroup('print-size-group', (v) => {
     printMm = Number(v);
+    updatePrintNote();
+  });
+  radioGroup('print-tiles-group', (v) => {
+    printTiles = Number(v);
     updatePrintNote();
   });
 
@@ -849,6 +865,10 @@ function bindShare(): void {
     await new Promise((r) => window.setTimeout(r, 30)); // let the message show
     try {
       const name = title();
+      if (printTiles > 1) {
+        await saveTiles(name);
+        return;
+      }
       const scale = printScale(state.size, printMm);
       const tris = buildPrint(model.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration });
       const brokenBuildings = tris.skipped;
@@ -869,5 +889,45 @@ function bindShare(): void {
       stlBtn.disabled = false;
     }
   });
+
+  /** The print as n × n tiles in a ZIP, with the title ledge as its own piece and a note on the layout. */
+  async function saveTiles(name: string): Promise<void> {
+    if (!model) return;
+    const n = printTiles;
+    const totalMm = printMm * n;
+    const scale = printScale(state.size, totalMm);
+    const tiles = buildTiledPrint(model.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, tiles: n });
+    const files: ZipEntry[] = tiles.map((t) => ({
+      name: `tile-${t.name}.stl`,
+      data: new Uint8Array(toBinaryStl(t.tris, `${name}, tile ${t.name} of ${n}x${n}, ${scale}`)),
+    }));
+    // the most a building was left out in any one tile (one building can be cut into several)
+    const broken = Math.max(0, ...tiles.map((t) => t.tris.skipped));
+    let label: ReturnType<typeof addLabel> = null;
+    if ($<HTMLInputElement>('print-ledge').checked) {
+      const ledge = new Triangles();
+      label = addLabel(ledge, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM);
+      if (label) files.push({ name: 'title.stl', data: new Uint8Array(toBinaryStl(ledge, `${name}, title ledge`)) });
+    }
+    const last = tileName(n - 1, n - 1);
+    const readme = [
+      `Your Place: ${name}`,
+      `${formatArea(state.size)}, ${n * n} tiles (${n} x ${n}) of ${printMm / 10} cm, ${totalMm / 10} x ${totalMm / 10} cm in all, ${scale}, terrain x${state.exaggeration.toFixed(1)}.`,
+      '',
+      `Tiles are named by row and column like a map grid: row A is the north edge (the back), column 1 the west (left).`,
+      `A1 is the north-west corner, ${last} the south-east. Print each tile flat, base down, at 100%; they fit edge to edge.`,
+      label ? 'title.stl is the title ledge: put it in front of the bottom row, in the middle.' : '',
+      '',
+      'Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen terrain tiles on AWS Open Data.',
+    ].filter((l, i, a) => l || a[i - 1]).join('\n');
+    files.push({ name: 'README.txt', data: new TextEncoder().encode(readme) });
+    const zip = makeZip(files);
+    saveBlob(new Blob([zip], { type: 'application/zip' }), exportFileName(name, state.size, `${n}x${n}-tiles-${printMm / 10}cm.zip`));
+    const triangles = tiles.reduce((s, t) => s + t.tris.count, 0);
+    const mb = (zip.byteLength / 1048576).toFixed(zip.byteLength < 10485760 ? 1 : 0);
+    const left = broken ? ` A building with a broken outline in the map data was left out.` : '';
+    const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
+    msg.textContent = `Saved: ${n * n} tiles of ${printMm / 10} cm, ${totalMm / 10} × ${totalMm / 10} cm in all${label ? ', and the title ledge as its own piece' : ''}, at ${scale}, ${new Intl.NumberFormat().format(triangles)} triangles (${mb} MB).${left}${missing}`;
+  }
 }
 

@@ -6,8 +6,16 @@
 import { round, type LngLat } from './geo/projection';
 
 export type BuildingStyle = 'white' | 'ramp';
-export const AREA_SIZES = [1000, 2000, 4000] as const;
-export type AreaSize = (typeof AREA_SIZES)[number];
+/** The side of the square (m): 300 m to 4 km in 100 m steps. */
+export type AreaSize = number;
+export const AREA_MIN = 300;
+export const AREA_MAX = 4000;
+export const AREA_STEP = 100;
+export const clampSize = (m: number): AreaSize => Math.min(AREA_MAX, Math.max(AREA_MIN, Math.round(m / AREA_STEP) * AREA_STEP));
+/** "500 m", "1.5 km", "2 km" */
+export const formatSize = (m: number): string => (m < 1000 ? `${m} m` : `${Number((m / 1000).toFixed(1))} km`);
+/** "500 × 500 m", "2 × 2 km" */
+export const formatArea = (m: number): string => (m < 1000 ? `${m} × ${m} m` : `${Number((m / 1000).toFixed(1))} × ${formatSize(m)}`);
 
 export interface Layers {
   roads: boolean;
@@ -55,7 +63,7 @@ export function encodeState(s: ViewState): string {
   const p = new URLSearchParams();
   p.set('lat', round(s.center.lat, 5).toFixed(5));
   p.set('lon', round(s.center.lon, 5).toFixed(5));
-  p.set('km', String(s.size / 1000));
+  p.set('km', String(Number((s.size / 1000).toFixed(1))));
   p.set('ex', round(s.exaggeration, 1).toString());
   if (s.contours) p.set('ct', '1');
   if (s.style !== 'white') p.set('st', s.style);
@@ -81,8 +89,7 @@ export function decodeState(raw: string, base: ViewState = DEFAULT_STATE): ViewS
     return { ...base, center: null, pin: null };
   }
   const km = Number(p.get('km'));
-  const size = (km * 1000) as AreaSize;
-  if (AREA_SIZES.includes(size)) s.size = size;
+  if (p.has('km') && Number.isFinite(km) && km > 0) s.size = clampSize(km * 1000);
   const ex = Number(p.get('ex'));
   if (p.has('ex') && Number.isFinite(ex)) s.exaggeration = Math.min(EXAGGERATION_MAX, Math.max(EXAGGERATION_MIN, ex));
   s.contours = p.get('ct') === '1';
