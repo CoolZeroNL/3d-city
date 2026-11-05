@@ -109,15 +109,19 @@ export class CityModel {
         height: heights[i].height,
         minHeight: heights[i].minHeight,
         estimated: isEstimated(heights[i].source),
+        heightKnown: !isEstimated(heights[i].source),
       })),
     );
   }
 
   /** Buildings with heights already decided (vector tiles carry them). */
-  setBuildingSpecs(specs: BuildingSpec[]): void {
+  setBuildingSpecs(given: BuildingSpec[]): void {
     this.clearBuildings();
     // where the elevation data measured roofs, take the buildings back out of the ground first
-    this.roofBumps = removeRoofBumps(this.grid, specs);
+    this.roofBumps = removeRoofBumps(this.grid, given);
+    // and where OpenStreetMap had no height, the roof the data measured gives one
+    const measured = this.roofBumps.heights;
+    const specs = measured.size ? given.map((s, i) => (measured.has(i) ? { ...s, height: Math.max(measured.get(i)!, s.minHeight + 0.5) } : s)) : given;
     if (this.roofBumps.lowered) {
       this.uniforms.uInterval.value = contourInterval(this.grid.max - this.grid.min);
       this.setExaggeration(this.exaggeration);
@@ -315,7 +319,8 @@ export class CityModel {
       .sort((a, c) => c.bump - a.bump);
     const median = (v: number[]) => (v.length ? [...v].sort((a, c) => a - c)[v.length >> 1] : 0);
     return {
-      roofBumps: this.roofBumps,
+      // a Map doesn't survive JSON: report how many heights came from the data
+      roofBumps: this.roofBumps && { ...this.roofBumps, heights: this.roofBumps.heights.size },
       groundBumps: {
         large: bumps.length,
         over3m: bumps.filter((x) => x.bump > 3).length,

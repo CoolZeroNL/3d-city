@@ -17,6 +17,8 @@ export interface BuildingSpec {
   height: number;
   minHeight: number;
   estimated: boolean;
+  /** false where the height is a fallback; roof bumps in the elevation data can then tell it */
+  heightKnown?: boolean;
 }
 
 export interface BuildingsBuild {

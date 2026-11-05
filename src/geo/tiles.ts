@@ -35,6 +35,8 @@ export interface TileBuilding {
   poly: Polygon;
   height: number;
   minHeight: number;
+  /** false where OpenStreetMap has no height or floor count: the tiles then say 5 m */
+  heightKnown: boolean;
 }
 
 export interface TileData {
@@ -238,6 +240,8 @@ export function parseTiles(tiles: LoadedTile[], center: LngLat, sizeM: number): 
       eachFeature(layers.building, (f) => {
         if (f.type !== 3 || f.properties.hide_3d) return; // hide_3d: outline drawn by its building:parts
         const height = Math.max(num(f.properties.render_height, 5), 1);
+        // OpenMapTiles falls back to 5 m without a height or floor count; an exact 5 is nearly always that
+        const heightKnown = f.properties.render_height != null && num(f.properties.render_height, 5) !== 5;
         const minHeight = Math.max(0, Math.min(num(f.properties.render_min_height, 0), height - 0.5));
         for (const p of polygonsOf(f, toLocal)) {
           for (const c of clipBuildingToRect(p, bw, bs, be, bn, 2)) {
@@ -245,10 +249,10 @@ export function parseTiles(tiles: LoadedTile[], center: LngLat, sizeM: number): 
             const eps = 1e-6;
             const onSeam = (bw > -h && x0 <= bw + eps) || (be < h && x1 >= be - eps) || (bs > -h && y0 <= bs + eps) || (bn < h && y1 >= bn - eps);
             if (!onSeam) {
-              buildings.push({ poly: c, height, minHeight });
+              buildings.push({ poly: c, height, minHeight, heightKnown });
               continue;
             }
-            const key = `${height}|${minHeight}`;
+            const key = `${height}|${minHeight}|${heightKnown ? 1 : 0}`;
             const list = seamPieces.get(key);
             if (list) list.push(c);
             else seamPieces.set(key, [c]);
@@ -316,8 +320,8 @@ export function parseTiles(tiles: LoadedTile[], center: LngLat, sizeM: number): 
     collectPlaces(t, proj, settlements);
   }
   for (const [key, pieces] of seamPieces) {
-    const [height, minHeight] = key.split('|').map(Number);
-    for (const poly of joinPieces(pieces)) buildings.push({ poly, height, minHeight });
+    const [height, minHeight, known] = key.split('|').map(Number);
+    for (const poly of joinPieces(pieces)) buildings.push({ poly, height, minHeight, heightKnown: known === 1 });
   }
 
   return { buildings, features: { areas, lines, coastlines: [], sea }, settlements: [...settlements.values()] };

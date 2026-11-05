@@ -8,6 +8,10 @@
  * themselves: when many large buildings sit on a bump, the ground under them is lowered to the
  * street level around them. A bump much higher than its building is a real hill (a castle on its
  * rock) and is left alone, as is everything in areas where only the odd building sits higher.
+ *
+ * Where OpenStreetMap has no height for a building, its bump is the best measure there is: the
+ * ground goes back down, and the building takes the bump's height (Anchorage's unmapped towers
+ * otherwise stood 5 m tall inside hills of their own roofs).
  */
 
 import { pointInRing, signedArea, type Polygon, type Pt } from './polygon';
@@ -26,7 +30,12 @@ export interface Footprint {
   poly: Polygon;
   /** building height above ground (m) */
   height: number;
+  /** false where the height is a fallback (no height or floor count in OpenStreetMap) */
+  heightKnown?: boolean;
 }
+
+/** For buildings without a known height only the shape tells a roof from a hill; above this it's a hill (m). */
+export const UNKNOWN_ROOF_CAP = 250;
 
 export interface RoofBumpResult {
   /** large buildings looked at */
@@ -41,12 +50,16 @@ export interface RoofBumpResult {
   maxDrop: number;
   /** of the large buildings, those still on a roof bump afterwards (same measure as `bumped`) */
   remaining: number;
+  /** new heights (by index into the buildings) for buildings without a known height, from their roof bumps */
+  heights: Map<number, number>;
 }
 
 /** The highest bump a building of this height can leave in a surface model; anything higher is a real hill. */
 export const roofCap = (height: number) => Math.max(height * 1.5, height + 15);
 
 interface Measured {
+  index: number;
+  known: boolean;
   ring: Pt[];
   poly: Polygon;
   bbox: [number, number, number, number];
@@ -88,6 +101,39 @@ function groundAround(grid: HeightGrid, cx: number, cy: number, d0: number, d1: 
 }
 
 /**
+ * Whether the ground keeps falling beyond `near` out to `far` in nearly every direction: a real
+ * hill does, a roof bump is level again, and so is a building near a bluff (the ground drops on
+ * one side only). Per direction the lowest of a few samples counts, which skips roofs on the way.
+ * Null where too few directions stay inside the model.
+ */
+function fallsAway(grid: HeightGrid, cx: number, cy: number, near: [number, number], far: [number, number], drop: number): boolean | null {
+  const h = grid.sizeM / 2;
+  const within = (x: number, y: number) => Math.abs(x) <= h && Math.abs(y) <= h;
+  const lowest = (dx: number, dy: number, [d0, d1]: [number, number]) => {
+    let m = Infinity;
+    for (let s = 0; s <= 4; s++) {
+      const d = d0 + ((d1 - d0) * s) / 4;
+      const x = cx + dx * d;
+      const y = cy + dy * d;
+      if (!within(x, y)) return NaN;
+      m = Math.min(m, sampleGrid(grid, x, y));
+    }
+    return m;
+  };
+  let valid = 0;
+  let falling = 0;
+  for (let k = 0; k < 24; k++) {
+    const a = (k * Math.PI) / 12;
+    const n = lowest(Math.cos(a), Math.sin(a), near);
+    const f = lowest(Math.cos(a), Math.sin(a), far);
+    if (Number.isNaN(n) || Number.isNaN(f)) continue;
+    valid++;
+    if (n - f > drop) falling++;
+  }
+  return valid < 8 ? null : falling >= valid * 0.75;
+}
+
+/**
  * How far the ground under a building rises above street level around it (`bump`), and whether
  * the ground keeps falling further out (`hill`: a real hill rather than a roof in the data).
  * Exported for tools/inspect, so the inspection measures exactly what the fix uses.
@@ -121,19 +167,18 @@ export function measureGround(grid: HeightGrid, poly: Polygon): { bump: number; 
   const cx = (x0 + x1) / 2;
   const cy = (y0 + y1) / 2;
   const inside = count ? sum / count : sampleGrid(grid, cx, cy);
-  // street level just around it, and further out: a roof bump is level again just beyond the
-  // building, a real hill keeps falling
+  // street level just around it; a roof bump is level again just beyond the building, a real
+  // hill keeps falling further out
   const r = Math.sqrt(Math.max(area, 1) / Math.PI);
   const near = groundAround(grid, cx, cy, r + 25, r + 45);
   if (Number.isNaN(near)) return null;
-  const far = groundAround(grid, cx, cy, r + 90, r + 130);
   const bump = inside - near;
   // without ground further out (deep in a corner) a hill can't be ruled out: count it as one
-  const hill = Number.isNaN(far) || near - far > Math.max(3, 0.3 * bump);
+  const hill = fallsAway(grid, cx, cy, [r + 25, r + 45], [r + 90, r + 130], Math.max(3, 0.3 * bump)) ?? true;
   return { bump, near, hill, area };
 }
 
-const isRoof = (m: Measured, minBump: number) => m.bump > minBump && m.bump <= roofCap(m.height) && !m.hill;
+const isRoof = (m: Measured, minBump: number) => m.bump > minBump && m.bump <= (m.known ? roofCap(m.height) : UNKNOWN_ROOF_CAP) && !m.hill;
 
 function distanceToRing(p: Pt, ring: Pt[]): number {
   let best = Infinity;
@@ -186,7 +231,7 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
     return best;
   };
 
-  for (const b of buildings) {
+  for (const [index, b] of buildings.entries()) {
     const m = measureGround(grid, b.poly);
     if (!m || m.area < ROOF_MIN_AREA) continue;
     const ring = b.poly.outer;
@@ -199,11 +244,11 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
     }
     const r = Math.sqrt(m.area / Math.PI);
     const height = Math.max(b.height, tallestNear((x0 + x1) / 2, (y0 + y1) / 2, r + 60));
-    measured.push({ ring, poly: b.poly, bbox: [x0, y0, x1, y1], ref: m.near, bump: m.bump, height, hill: m.hill });
+    measured.push({ index, known: b.heightKnown !== false, ring, poly: b.poly, bbox: [x0, y0, x1, y1], ref: m.near, bump: m.bump, height, hill: m.hill });
   }
 
   const bumped = measured.filter((m) => isRoof(m, ROOF_BUMP_M)).length;
-  const result: RoofBumpResult = { large: measured.length, bumped, applied: false, lowered: 0, maxDrop: 0, remaining: bumped };
+  const result: RoofBumpResult = { large: measured.length, bumped, applied: false, lowered: 0, maxDrop: 0, remaining: bumped, heights: new Map() };
   if (bumped < ROOF_MIN_COUNT || bumped < measured.length * ROOF_SHARE) return result;
   result.applied = true;
 
@@ -211,6 +256,9 @@ export function removeRoofBumps(grid: HeightGrid, buildings: Footprint[]): RoofB
   const margin = Math.max(step * 1.5, 20);
   for (const m of measured) {
     if (!isRoof(m, 1)) continue;
+    // the data measured this building's roof: better than a fallback height
+    const own = buildings[m.index].height;
+    if (!m.known && m.bump >= ROOF_BUMP_M && m.bump > own) result.heights.set(m.index, Math.round(m.bump * 10) / 10);
     const [x0, y0, x1, y1] = m.bbox;
     for (let j = Math.max(0, Math.ceil((y0 - margin + h) / step)); j <= Math.min(n - 1, Math.floor((y1 + margin + h) / step)); j++) {
       for (let i = Math.max(0, Math.ceil((x0 - margin + h) / step)); i <= Math.min(n - 1, Math.floor((x1 + margin + h) / step)); i++) {
