@@ -33,6 +33,8 @@ export const DEFAULT_TILT_DEG = 20;
 /** A press that moves less than this (CSS px) and ends within TAP_MS is a tap, not a drag. */
 const TAP_SLOP_PX = { mouse: 5, touch: 10 };
 const TAP_MS = 500;
+/** A second tap this soon and this close to the first makes a double tap (or double-click). */
+const DOUBLE_TAP = { ms: 400, px: 30 };
 /** Shift + arrow keys slide the model: [right, forward] relative to the camera. */
 const SLIDE_KEYS: Record<string, [number, number] | undefined> = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
 
@@ -70,6 +72,8 @@ export class Viewer {
   private readonly raycaster = new Raycaster();
   private readonly pointersDown = new Set<number>();
   private tapStart: { id: number; x: number; y: number; t: number; slop: number } | null = null;
+  private readonly doubleTapListeners = new Set<(x: number, y: number) => void>();
+  private lastTap: { x: number; y: number; t: number } | null = null;
   private reducedMotion = prefersReducedMotion();
   /** CSS px covered by UI on the left (desktop settings panel); the model is centred in the rest */
   private insetLeft = 0;
@@ -133,6 +137,12 @@ export class Viewer {
     return () => this.tapListeners.delete(fn);
   }
 
+  /** Two quick taps or clicks on the same spot; client coordinates. Each tap is reported to onTap first. */
+  onDoubleTap(fn: (x: number, y: number) => void): () => void {
+    this.doubleTapListeners.add(fn);
+    return () => this.doubleTapListeners.delete(fn);
+  }
+
   /** What is under a point of the canvas (client coordinates). */
   pick(clientX: number, clientY: number): PinHit | null {
     if (!this.model) return null;
@@ -164,6 +174,16 @@ export class Viewer {
       if (cancelled || e.shiftKey || e.ctrlKey || e.metaKey) return;
       if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > s.slop || performance.now() - s.t > TAP_MS) return;
       this.tapListeners.forEach((fn) => fn(e.clientX, e.clientY));
+      // own detection rather than dblclick: iOS Safari doesn't send dblclick for a double tap.
+      // The event's own time, not when it's handled: a slow frame after the first tap mustn't stretch the gap
+      const now = e.timeStamp;
+      const prev = this.lastTap;
+      if (prev && now - prev.t <= DOUBLE_TAP.ms && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) <= DOUBLE_TAP.px) {
+        this.lastTap = null;
+        this.doubleTapListeners.forEach((fn) => fn(e.clientX, e.clientY));
+      } else {
+        this.lastTap = { x: e.clientX, y: e.clientY, t: now };
+      }
     };
     canvas.addEventListener('pointerup', (e) => end(e, false));
     canvas.addEventListener('pointercancel', (e) => end(e, true));

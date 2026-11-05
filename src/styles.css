@@ -841,6 +841,40 @@ input[type='range'] {
   color: var(--text);
 }
 
+/* on computers with a mouse: how to turn, slide and move the area (dismissible) */
+.mouse-hint {
+  display: none;
+}
+
+@media (min-width: 880px) {
+  .app[data-mode='model'] .mouse-hint:not([hidden]) {
+    position: absolute;
+    right: var(--gutter);
+    bottom: 32px;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .mouse-hint strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .mouse-hint .icon-btn {
+    width: 30px;
+    height: 30px;
+  }
+}
+
 /* ------------------------------------------------------------------ attribution */
 
 .attribution {
@@ -1103,7 +1137,7 @@ input[type='range'] {
   }
 
   .toast {
-    bottom: 40px;
+    bottom: 80px;
   }
 }
 

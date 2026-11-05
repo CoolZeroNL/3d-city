@@ -183,6 +183,20 @@ function findBuilding(page) {
   });
 }
 const settle = (page, ms = 600) => page.waitForTimeout(ms);
+/** Wait until the camera stops moving: damping decays per frame, and software rendering draws few frames. */
+async function still(page, ms = 15000) {
+  const t0 = Date.now();
+  let prev = '';
+  while (Date.now() - t0 < ms) {
+    const cam = await page.evaluate(() => {
+      const c = window.__yourPlace.camera();
+      return c ? Object.values(c).map((v) => (typeof v === 'number' ? v.toFixed(3) : v)).join() : '';
+    });
+    if (cam && cam === prev) return;
+    prev = cam;
+    await page.waitForTimeout(300);
+  }
+}
 
 // ------------------------------------------------------------------ run
 
@@ -390,6 +404,20 @@ try {
     centred.c && Math.abs(centred.c.lat - wanted.lat) < 1e-9 && Math.abs(centred.c.lon - wanted.lon) < 1e-9 && centred.pin?.marked && Math.hypot(centred.pin.e, centred.pin.n) < 0.01,
     '“Centre here” builds a new square around the pinned building',
   );
+  // double-click: pin a spot and load the area around it in one go
+  await settle(p2, 800);
+  const spot3 = await findBuilding(p2);
+  const before3 = await p2.evaluate(() => window.__yourPlace.state().center);
+  if (spot3) await p2.mouse.dblclick(spot3.x, spot3.y);
+  await p2
+    .waitForFunction((b) => { const yp = window.__yourPlace; const c = yp.state().center; const pin = yp.state().pin; return c && pin && Math.abs(c.lat - pin.lat) < 1e-9 && Math.abs(c.lat - b.lat) + Math.abs(c.lon - b.lon) > 1e-6 && yp.stage === 'ready'; }, before3, { timeout: 120000 })
+    .catch(() => undefined);
+  const after3 = await p2.evaluate(() => ({ c: window.__yourPlace.state().center, pin: window.__yourPlace.state().pin }));
+  expect(!!spot3 && !!after3.pin && Math.abs(after3.c.lat - after3.pin.lat) < 1e-9 && Math.abs(after3.c.lat - before3.lat) + Math.abs(after3.c.lon - before3.lon) > 1e-6, 'double-clicking a spot loads the area around it');
+  // the mouse hint: shown on a computer until it's closed
+  expect(await p2.isVisible('#mouse-hint'), 'a computer shows how to turn, slide and move the area');
+  await p2.click('#mouse-hint-close');
+  expect(!(await p2.isVisible('#mouse-hint')), 'the mouse hint closes');
   await p2.close();
 
   // map tiles down → Overpass fallback still builds the model
@@ -484,15 +512,33 @@ try {
     Math.hypot(camB.targetE - camA.targetE, camB.targetN - camA.targetN) > 20 && Math.abs(camB.azimuth - camA.azimuth) < 2 && Math.abs(camB.tilt - camA.tilt) < 2,
     `phone: two fingers slide the model without turning it (moved ${Math.round(Math.hypot(camB.targetE - camA.targetE, camB.targetN - camA.targetN))} m)`,
   );
+  await still(mp);
   const tapAt = await findBuilding(mp);
   if (tapAt) await mp.touchscreen.tap(tapAt.x, tapAt.y);
   await mp.waitForFunction(() => window.__yourPlace.pin()?.marked, null, { timeout: 5000 }).catch(() => undefined);
   expect(!!tapAt && (await mp.evaluate(() => window.__yourPlace.pin()?.marked)), 'phone: tapping a building pins it');
+  expect(!(await mp.isVisible('#mouse-hint')), 'phone: no mouse hint');
   await settle(mp, 1000);
   await shot(mp, '09b-pinned-phone');
   await mp.click('#sheet-toggle');
   await settle(mp, 400);
   await shot(mp, '10-sheet-phone');
+  // double-tap (iOS Safari sends no dblclick for it, so the app detects two taps itself)
+  await mp.click('#sheet-toggle');
+  await settle(mp, 800);
+  await still(mp);
+  const dtap = await findBuilding(mp);
+  const beforeD = await mp.evaluate(() => window.__yourPlace.state().center);
+  if (dtap) {
+    await mp.touchscreen.tap(dtap.x, dtap.y);
+    await mp.waitForTimeout(120);
+    await mp.touchscreen.tap(dtap.x, dtap.y);
+  }
+  await mp
+    .waitForFunction((b) => { const yp = window.__yourPlace; const c = yp.state().center; const pin = yp.state().pin; return c && pin && Math.abs(c.lat - pin.lat) < 1e-9 && Math.abs(c.lat - b.lat) + Math.abs(c.lon - b.lon) > 1e-6 && yp.stage === 'ready'; }, beforeD, { timeout: 120000 })
+    .catch(() => undefined);
+  const afterD = await mp.evaluate(() => ({ c: window.__yourPlace.state().center, pin: window.__yourPlace.state().pin }));
+  expect(!!dtap && !!afterD.pin && Math.abs(afterD.c.lat - afterD.pin.lat) < 1e-9 && Math.abs(afterD.c.lat - beforeD.lat) + Math.abs(afterD.c.lon - beforeD.lon) > 1e-6, `phone: double-tapping a spot loads the area around it (${dtap ? 'tapped' : 'no building found'})`);
   await phone.close();
 
   // ---------------- a browser that adds noise to canvas reads (Orion, Brave: fingerprinting protection)

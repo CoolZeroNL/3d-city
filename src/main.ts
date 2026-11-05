@@ -92,6 +92,8 @@ setupSearch({
 
 const wide = window.matchMedia('(min-width: 880px)');
 const coarse = window.matchMedia('(pointer: coarse)');
+bindDoubleClick();
+bindMouseHint();
 $('gesture-hint').textContent = gestureHint();
 coarse.addEventListener('change', () => ($('gesture-hint').textContent = gestureHint()));
 if (wide.matches) setSheetOpen(true);
@@ -469,6 +471,8 @@ function resetPin(): void {
 
 /** Once per browser: say how to pin a house and slide the model. */
 function showGestureTip(): void {
+  // the mouse hint says the same, and stays
+  if (!$('mouse-hint').hidden && wide.matches) return;
   try {
     if (localStorage.getItem('yp:tip-pin')) return;
     localStorage.setItem('yp:tip-pin', '1');
@@ -480,8 +484,43 @@ function showGestureTip(): void {
 
 function gestureHint(): string {
   return coarse.matches
-    ? 'Tap a building to pin it · two fingers slide and zoom'
-    : 'Click a building to pin it · right-drag or Shift-drag slides the model';
+    ? 'Tap a building to pin it · two fingers slide and zoom · double-tap loads the area there'
+    : 'Click a building to pin it · right-drag or Shift-drag slides the model · double-click loads the area there';
+}
+
+/** Double-click (or double-tap) a spot: pin it and build a new square around it. */
+function bindDoubleClick(): void {
+  viewer.onDoubleTap((x, y) => {
+    if (!model || !state.center || debug.stage === 'loading') return;
+    if (!viewer.pick(x, y)) return;
+    movePinTo(x, y);
+    notice.hide();
+    toast('Loading the area around this spot');
+    centreOnPin();
+  });
+}
+
+/** On computers with a mouse, a small hint until it's dismissed: the controls aren't obvious. */
+function bindMouseHint(): void {
+  const hint = $('mouse-hint');
+  let dismissed = false;
+  try {
+    dismissed = !!localStorage.getItem('yp:hint-mouse');
+  } catch {
+    /* no storage: show it */
+  }
+  const update = () => (hint.hidden = dismissed || coarse.matches);
+  $('mouse-hint-close').addEventListener('click', () => {
+    dismissed = true;
+    update();
+    try {
+      localStorage.setItem('yp:hint-mouse', '1');
+    } catch {
+      /* no storage: hidden for this visit */
+    }
+  });
+  coarse.addEventListener('change', update);
+  update();
 }
 
 function locate(): void {
