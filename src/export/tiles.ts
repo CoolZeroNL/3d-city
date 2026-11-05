@@ -13,7 +13,8 @@ import type { Polygon } from '../geo/polygon';
 import { sampleGrid, type HeightGrid } from '../geo/terrain';
 import { buildPrint, type PrintBuilding, type PrintOptions, type Triangles } from './stl';
 
-export const TILE_COUNTS = [1, 2, 3, 4] as const;
+/** Up to 8 × 8 tiles: 20 cm tiles make a 1.6 m model for a wall. */
+export const MAX_TILES = 8;
 
 export interface PrintTile {
   /** "A1": row letter from the north (back) edge, column number from the west (left) */

@@ -9,7 +9,7 @@ import { HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
 import { clampSize, decodeState, encodeState, formatArea, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
-import { buildTiledPrint, tileName } from './export/tiles';
+import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
 import { addLabel, loadGlyphs } from './export/label';
 import { exportFileName, makePoster, posterFileName } from './ui/poster';
@@ -791,8 +791,11 @@ function bindShare(): void {
     printMm = Number(v);
     updatePrintNote();
   });
-  radioGroup('print-tiles-group', (v) => {
-    printTiles = Number(v);
+  const tilesRange = $<HTMLInputElement>('tiles-range');
+  tilesRange.max = String(MAX_TILES);
+  tilesRange.addEventListener('input', () => {
+    printTiles = Number(tilesRange.value);
+    $('tiles-out').textContent = printTiles > 1 ? `${printTiles} × ${printTiles} tiles` : 'One piece';
     updatePrintNote();
   });
 

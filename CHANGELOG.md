@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 — 2026-11-05
+
+- Prints in up to 8 × 8 tiles, for a model to hang on the wall: 64 tiles of 20 cm make 1.6 m across, and a 4 km area at that size is about 1:2,500. The tile choice is a slider now. Suggested on Reddit.
+
 ## 1.3.0 — 2026-11-05
 
 Both suggested on Reddit.

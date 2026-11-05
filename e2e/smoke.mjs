@@ -272,6 +272,7 @@ try {
     }, m);
     await page.waitForFunction(() => window.__yourPlace.stage !== 'ready', null, { timeout: 5000 }).catch(() => undefined);
     await waitStage(page, ['ready', 'error']);
+    await still(page); // the camera's fly-in after a load would override keys pressed during it
   };
   await setArea(1500);
   expect(
@@ -395,7 +396,14 @@ try {
   expect(Math.abs(bare.size[0] - 100) < 0.01 && Math.abs(bare.size[1] - 100) < 0.01, `without the title the print is the plain square (${bare.size.map((v) => v.toFixed(2)).join(' × ')} mm)`);
   await page.check('#print-ledge');
   // tiles: 2 × 2 pieces of 10 cm in a ZIP, with the title ledge as its own piece
-  await page.click('#print-tiles-group [data-value="2"]');
+  const setTiles = (n) =>
+    page.$eval('#tiles-range', (el, v) => {
+      el.value = String(v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, n);
+  await setTiles(8);
+  expect((await page.textContent('#tiles-out')) === '8 × 8 tiles' && /^64 tiles, 80 × 80 cm in all · 1:2,500/.test(await page.textContent('#print-note')), `tiles go up to 8 × 8 (“${await page.textContent('#print-note')}”)`);
+  await setTiles(2);
   expect(/^4 tiles, 20 × 20 cm in all · 1:10,000 · terrain ×3\.0$/.test(await page.textContent('#print-note')), `the tile choice shows the size in all and the scale (“${await page.textContent('#print-note')}”)`);
   const [zdl] = await Promise.all([page.waitForEvent('download', { timeout: 180000 }), page.click('#stl-btn')]);
   const zpath = join(out, '06f-tiles.zip');
@@ -426,7 +434,16 @@ try {
   );
   expect(/A1 is the north-west corner/.test(files['README.txt'].toString()), 'the note in the ZIP explains how the tiles go together');
   expect(/^Saved: 4 tiles of 10 cm, 20 × 20 cm in all, and the title ledge as its own piece, at 1:10,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the tiles');
-  await page.click('#print-tiles-group [data-value="1"]');
+  // the largest split, in the browser: 64 tiles in one ZIP
+  await setTiles(8);
+  const t8 = Date.now();
+  const [z8] = await Promise.all([page.waitForEvent('download', { timeout: 300000 }), page.click('#stl-btn')]);
+  const z8path = join(out, '06g-tiles-8x8.zip');
+  await z8.saveAs(z8path);
+  const zip8 = readFileSync(z8path);
+  const n8 = zip8.readUInt16LE(zip8.length - 22 + 10);
+  expect(n8 === 66 && /-8x8-tiles-10cm\.zip$/.test(z8.suggestedFilename()), `8 × 8 tiles download in ${((Date.now() - t8) / 1000).toFixed(0)} s: ${n8} files, ${(zip8.length / 1048576).toFixed(1)} MB`);
+  await setTiles(1);
   // the poster carries the title and the second line too
   const [titledPoster] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#poster-btn')]);
   expect(titledPoster.suggestedFilename() === 'your-place-our-first-home-2km.png', `the poster uses your own title (${titledPoster.suggestedFilename()})`);

@@ -67,7 +67,7 @@ describe('a print in tiles', () => {
   const buildings = [square(-300, 300, 40, 150), square(0, -100, 80, 70), square(250, -250, 30, 60)];
   const opts = { sideMm: 100, baseMm: 3, exaggeration: 1.5 };
 
-  for (const n of [2, 3]) {
+  for (const n of [2, 3, 8]) {
     it(`splits into ${n} × ${n} closed tiles that meet edge to edge on one base`, () => {
       const tiles = buildTiledPrint(hills(), buildings, { ...opts, tiles: n });
       expect(tiles.map((t) => t.name)).toEqual(Array.from({ length: n * n }, (_, k) => tileName(Math.floor(k / n), k % n)));

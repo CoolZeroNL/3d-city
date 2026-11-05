@@ -235,13 +235,11 @@
               <button type="button" role="radio" data-value="150" aria-checked="true">15 cm</button>
               <button type="button" role="radio" data-value="200" aria-checked="false" tabindex="-1">20 cm</button>
             </div>
-            <div class="control-label tiles-label"><span id="tiles-label">Split into tiles that fit your print bed</span></div>
-            <div class="segmented" role="radiogroup" aria-labelledby="tiles-label" id="print-tiles-group">
-              <button type="button" role="radio" data-value="1" aria-checked="true">One piece</button>
-              <button type="button" role="radio" data-value="2" aria-checked="false" tabindex="-1">2 × 2</button>
-              <button type="button" role="radio" data-value="3" aria-checked="false" tabindex="-1">3 × 3</button>
-              <button type="button" role="radio" data-value="4" aria-checked="false" tabindex="-1">4 × 4</button>
+            <div class="control-label tiles-label">
+              <label for="tiles-range">Split into tiles that fit your print bed</label>
+              <output id="tiles-out" for="tiles-range">One piece</output>
             </div>
+            <input type="range" id="tiles-range" min="1" max="8" step="1" value="1" />
             <label class="check"><input type="checkbox" id="print-ledge" checked /> Raise the title on a ledge in front</label>
             <button type="button" class="btn btn-wide" id="stl-btn">Download 3D print file (STL)</button>
           </div>
