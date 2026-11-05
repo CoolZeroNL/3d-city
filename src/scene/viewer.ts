@@ -66,6 +66,8 @@ export class Viewer {
   private contactShadow: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
   private model: CityModel | null = null;
   private dirty = true;
+  /** whether the last frame moved the camera (damping or an animation still running); for tests */
+  moving = false;
   private animation: { from: CameraState; to: CameraState; start: number; ms: number } | null = null;
   private readonly cameraListeners = new Set<() => void>();
   private readonly tapListeners = new Set<(x: number, y: number) => void>();
@@ -421,6 +423,7 @@ export class Viewer {
       if (k >= 1) this.animation = null;
     }
     const moved = this.controls.update();
+    this.moving = moved || !!this.animation;
     if (moved || this.dirty) {
       this.dirty = false;
       this.renderer.render(this.scene, this.camera);

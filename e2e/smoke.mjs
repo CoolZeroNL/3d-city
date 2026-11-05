@@ -167,7 +167,8 @@ async function waitStage(page, stages, timeout = 180000) {
 const shot = (page, name) => page.screenshot({ path: join(out, `${name}.png`) });
 
 /** Screen point over a building, away from the centre (searching outwards from the middle of the view). */
-function findBuilding(page) {
+async function findBuilding(page) {
+  await still(page);
   return page.evaluate(() => {
     const yp = window.__yourPlace;
     for (let d = 0; d <= 320; d += 16)
@@ -177,25 +178,18 @@ function findBuilding(page) {
         // only where the 3D view itself is on top (not under the tip, a card or the sheet)
         if (document.elementFromPoint(x, y)?.id !== 'scene') continue;
         const h = yp.pick(x, y);
-        if (h?.building && Math.hypot(h.e, h.n) > 60) return { x, y, e: h.e, n: h.n };
+        if (!h?.building || Math.hypot(h.e, h.n) <= 60) continue;
+        // the building covers the pixels around too, so rounding of touch coordinates still hits it
+        if ([[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => yp.pick(x + dx, y + dy)?.building)) return { x, y, e: h.e, n: h.n };
       }
     return null;
   });
 }
 const settle = (page, ms = 600) => page.waitForTimeout(ms);
-/** Wait until the camera stops moving: damping decays per frame, and software rendering draws few frames. */
-async function still(page, ms = 15000) {
-  const t0 = Date.now();
-  let prev = '';
-  while (Date.now() - t0 < ms) {
-    const cam = await page.evaluate(() => {
-      const c = window.__yourPlace.camera();
-      return c ? Object.values(c).map((v) => (typeof v === 'number' ? v.toFixed(3) : v)).join() : '';
-    });
-    if (cam && cam === prev) return;
-    prev = cam;
-    await page.waitForTimeout(300);
-  }
+/** Wait until the camera stops gliding: damping decays per frame, and software rendering draws few frames. */
+async function still(page, ms = 20000) {
+  await page.waitForFunction(() => !window.__yourPlace.moving(), null, { timeout: ms, polling: 100 }).catch(() => undefined);
+  await page.waitForTimeout(200);
 }
 
 // ------------------------------------------------------------------ run
@@ -486,7 +480,9 @@ try {
   await vctx.close();
 
   // ---------------- phone
-  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // reduced motion turns off the glide after a slide: it decays per frame, and software rendering
+  // draws a phone-sized frame only a few times a second, so the model would still be gliding when tapped
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
   await routeAll(phone);
   const mp = await phone.newPage();
   watchConsole(mp, 'phone');
@@ -512,7 +508,6 @@ try {
     Math.hypot(camB.targetE - camA.targetE, camB.targetN - camA.targetN) > 20 && Math.abs(camB.azimuth - camA.azimuth) < 2 && Math.abs(camB.tilt - camA.tilt) < 2,
     `phone: two fingers slide the model without turning it (moved ${Math.round(Math.hypot(camB.targetE - camA.targetE, camB.targetN - camA.targetN))} m)`,
   );
-  await still(mp);
   const tapAt = await findBuilding(mp);
   if (tapAt) await mp.touchscreen.tap(tapAt.x, tapAt.y);
   await mp.waitForFunction(() => window.__yourPlace.pin()?.marked, null, { timeout: 5000 }).catch(() => undefined);
@@ -526,7 +521,6 @@ try {
   // double-tap (iOS Safari sends no dblclick for it, so the app detects two taps itself)
   await mp.click('#sheet-toggle');
   await settle(mp, 800);
-  await still(mp);
   const dtap = await findBuilding(mp);
   const beforeD = await mp.evaluate(() => window.__yourPlace.state().center);
   if (dtap) {
@@ -576,6 +570,9 @@ try {
   const nomBefore = counters.nominatim ?? 0;
   await sp.fill('#search-input', 'Königstraße 28, Stuttgart');
   await sp.waitForSelector('#suggestions li[role="option"]', { timeout: 5000 });
+  const firstRow = await sp.textContent('#suggestions li[role="option"]');
+  expect(/^Königstraße 28, Stuttgart.*Exact address/.test(firstRow ?? ''), `the typed address is offered first when the suggestions lack its house number (“${firstRow}”)`);
+  await shot(sp, '11b-exact-address');
   await sp.keyboard.press('Enter');
   const ts = await waitStage(sp, ['ready', 'error']);
   expect((counters.nominatim ?? 0) > nomBefore && ts.stage === 'ready', 'Enter with a house number the suggestions lack asks Nominatim for the exact address');

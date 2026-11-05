@@ -184,6 +184,15 @@ export function suggestionFits(q: string, p: Place): boolean {
   return own.some((x) => numbers.includes(x));
 }
 
+/**
+ * Whether to offer the typed text itself as the first choice: an address with a house number
+ * that the top suggestion doesn't carry (or no suggestion at all). Enter searches it then.
+ */
+export function offerTyped(q: string, top: Place | undefined): boolean {
+  if (!typedNumbers(q).length || !/\p{L}{2,}/u.test(q.replace(/\d+[a-z]?/gi, ''))) return false;
+  return !top || !suggestionFits(q, top);
+}
+
 async function photonSearch(q: string, bias: LngLat | null, signal: AbortSignal | undefined, extra: Record<string, string> = {}): Promise<Place[]> {
   const params = new URLSearchParams({ q, limit: '6', lang: photonLang(), ...extra });
   if (bias) {

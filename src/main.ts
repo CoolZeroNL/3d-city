@@ -51,6 +51,8 @@ const debug = {
   /** used by tools/inspect to diagnose odd-looking models */
   inspect: () => model?.inspect() ?? null,
   camera: () => (model ? viewer.getCameraState() : null),
+  /** whether the camera is still gliding (damping after a drag, or an animation) */
+  moving: () => viewer.moving,
   notice: () => (notice.visible ? $('notice-text').textContent : null),
   source: '' as '' | 'tiles' | 'overpass',
   pin: () => model?.pinInfo() ?? null,

@@ -4,7 +4,7 @@ import { areaKind, buildingsQuery, lineClass, parseBuildings, parseFeatures, typ
 import { assembleRings, clipRingToRect, groupPolygons, pointInRing, signedArea, type Ring } from '../src/geo/polygon';
 import { lngLatToTile, makeProjector, squareBBox } from '../src/geo/projection';
 import { chooseZoom, contourInterval, decodeTerrarium, fillHoles, gridFromMosaic, sampleGrid, SEA_FLOOR } from '../src/geo/terrain';
-import { parseCoordinates, parseMapLink, photonLabel, suggestionFits, typedNumbers, type Place } from '../src/geo/geocode';
+import { offerTyped, parseCoordinates, parseMapLink, photonLabel, suggestionFits, typedNumbers, type Place } from '../src/geo/geocode';
 
 const center = { lat: 52.2647, lon: 10.5236 };
 
@@ -284,6 +284,16 @@ describe('geocoding helpers', () => {
     expect(suggestionFits('Stuttgart', street)).toBe(true);
     expect(suggestionFits('70173', postcode)).toBe(true);
     expect(suggestionFits('Fifth Avenue New York', street)).toBe(true);
+  });
+
+  it('offers the typed address first when the suggestions only guess at it', () => {
+    const street: Place = { label: '10 Street SW', detail: 'Calgary, Canada', center: { lat: 51, lon: -114 }, kind: 'street' };
+    const house: Place = { label: '10 Avenue SW 1234', detail: 'Calgary, Canada', center: { lat: 51, lon: -114 }, kind: 'address', housenumber: '1234' };
+    expect(offerTyped('1234 10 Ave SW Calgary', street)).toBe(true); // a guess: a different street, no house
+    expect(offerTyped('1234 10 Ave SW Calgary', undefined)).toBe(true); // no suggestions at all
+    expect(offerTyped('1234 10 Ave SW Calgary', house)).toBe(false); // the suggestion is the house
+    expect(offerTyped('Fifth Avenue New York', street)).toBe(false); // no house number typed
+    expect(offerTyped('84999', undefined)).toBe(false); // a bare postcode isn't an address
   });
 });
 
