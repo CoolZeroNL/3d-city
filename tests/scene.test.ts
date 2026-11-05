@@ -140,7 +140,7 @@ describe('view state URL', () => {
 
   it('rejects bad input and clamps values', () => {
     expect(decodeState('#lat=abc&lon=1').center).toBeNull();
-    expect(decodeState('#lat=10&lon=10&ex=50').exaggeration).toBe(10);
+    expect(decodeState('#lat=10&lon=10&ex=50').exaggeration).toBe(5);
     expect(decodeState('#lat=10&lon=10&km=3').size).toBe(2000);
   });
 });

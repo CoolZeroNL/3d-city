@@ -263,19 +263,6 @@ try {
   await settle(page, 900);
   expect((await page.textContent('#ex-out')) === '×3.0', 'exaggeration slider updates its readout');
   await shot(page, '03-contours-exaggerated');
-  // up to 10×, for flat places
-  await page.$eval('#ex-range', (el) => {
-    el.value = '10';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await settle(page, 900);
-  expect((await page.textContent('#ex-out')) === '×10.0' && /ex=10(&|$)/.test(await page.evaluate(() => location.hash)), 'exaggeration goes up to 10× and into the share link');
-  await shot(page, '03b-exaggerated-10x');
-  await page.$eval('#ex-range', (el) => {
-    el.value = '3';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await settle(page, 600);
   await page.click('#style-group [data-value="ramp"]');
   expect(await page.isVisible('#legend'), 'height legend appears with height colours');
   await page.focus('#scene');

@@ -48,8 +48,7 @@ export const DEFAULT_STATE: ViewState = {
 };
 
 export const EXAGGERATION_MIN = 1;
-/** up to 10×: flat places need it to show any relief at all */
-export const EXAGGERATION_MAX = 10;
+export const EXAGGERATION_MAX = 5;
 
 export function encodeState(s: ViewState): string {
   if (!s.center) return '';
