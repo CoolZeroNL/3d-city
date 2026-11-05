@@ -27,7 +27,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 for (const [pi, hash] of places.entries()) {
   const tag = places.length > 1 ? `-${pi + 1}` : '';
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
-  await ctx.addInitScript(() => { try { localStorage.setItem('yp:tip-pin', '1'); localStorage.setItem('yp:own', '1'); } catch {} });
+  await ctx.addInitScript(() => { try { localStorage.setItem('yp:tip-pin', '1'); localStorage.setItem('yp:own', '1'); localStorage.setItem('yp:hint-mouse', '1'); } catch {} });
   const page = await ctx.newPage();
   const log = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text().slice(0, 300)}`); });

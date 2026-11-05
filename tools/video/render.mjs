@@ -51,7 +51,7 @@ const base = 'http://127.0.0.1:4321/';
 
 const icon = readFileSync(join(root, 'public', 'icon.svg'), 'utf8');
 const OVERLAY_CSS = `
-  .topbar, .fabs, .sheet, .attribution, .toast, .notice, .status, .welcome { display: none !important; }
+  .topbar, .fabs, .sheet, .attribution, .toast, .notice, .status, .welcome, .mouse-hint { display: none !important; }
   #promo { position: fixed; inset: 0; z-index: 100; pointer-events: none; color: #1e1c19;
     --paper: radial-gradient(120% 90% at 50% 30%, #f4f1ec 0%, #d9d3c8 100%); }
   #promo .scrim-top, #promo .scrim-bottom { position: absolute; left: 0; right: 0; }
@@ -122,7 +122,7 @@ for (const fmt of FORMATS) {
 
   // reduced motion turns off camera damping, so each frame shows exactly the camera that was set
   const ctx = await browser.newContext({ viewport: { width: fmt.width, height: fmt.height }, deviceScaleFactor: 1, reducedMotion: 'reduce', colorScheme: 'light' });
-  await ctx.addInitScript(() => { try { localStorage.setItem('yp:tip-pin', '1'); } catch {} });
+  await ctx.addInitScript(() => { try { localStorage.setItem('yp:tip-pin', '1'); localStorage.setItem('yp:hint-mouse', '1'); } catch {} });
 
   for (const [si, scene] of SCENES.entries()) {
     const page = await ctx.newPage();
