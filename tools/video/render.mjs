@@ -20,11 +20,11 @@ const DIP_S = 0.35; // fade through the background between places
 const END_S = 3.2;
 
 const SCENES = [
-  { place: 'Hong Kong', hash: 'lat=22.2795&lon=114.1605&km=2&ex=1', lines: ['Any address', 'as a 3D model'] },
-  { place: 'Porto', hash: 'lat=41.1405&lon=-8.6110&km=2&ex=1.5', lines: ['Real terrain.', 'Every building.'] },
+  { place: 'Hong Kong', hash: 'lat=22.2795&lon=114.1605&km=2&ex=1', lines: ['The street', 'you grew up on.'] },
+  { place: 'Porto', hash: 'lat=41.1405&lon=-8.6110&km=2&ex=1.5', lines: ['The place', 'you got married.'] },
   // 1 km side-on: the cut side wall shows the drop from the village on the rim into the canyon
-  { place: 'Grand Canyon Village', hash: 'lat=36.0590&lon=-112.1385&km=1&ex=1', lines: ['Cliffs and canyons,', 'to scale'], az: [115, 70] },
-  { place: 'Salzburg', hash: 'lat=47.7985&lon=13.0455&km=2&ex=1.5', lines: ['Save a poster,', 'or 3D print it'] },
+  { place: 'Grand Canyon Village', hash: 'lat=36.0590&lon=-112.1385&km=1&ex=1', lines: ['The trip you', 'still talk about.'], az: [115, 70] },
+  { place: 'Salzburg', hash: 'lat=47.7985&lon=13.0455&km=2&ex=1.5', lines: ['The town', 'you left.'] },
 ];
 
 const FORMATS = [
@@ -101,8 +101,8 @@ const OVERLAY_HTML = (fmt) => `
     <div class="end">
       ${icon}
       <h1>Your Place</h1>
-      <div class="what">Any address as a 3D model</div>
-      <div class="free">Free · No sign-up · Works on your phone<br>Poster and STL for 3D printing</div>
+      <div class="what">The places that matter to you, in 3D</div>
+      <div class="free">Any address, on its real terrain · Free · No sign-up<br>A poster or a 3D print, with your own title</div>
       <div class="url">${SITE}</div>
       <div class="osm">Map data © OpenStreetMap contributors</div>
     </div>
