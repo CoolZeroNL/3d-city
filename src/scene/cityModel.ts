@@ -24,6 +24,7 @@ import {
 } from './buildingsMesh';
 import { makeElevationUniforms, patchBuildingMaterial, type ElevationUniforms } from './materials';
 import type { PrintBuilding } from '../export/stl';
+import { waterMask } from '../export/water';
 import { Overlay } from './overlay';
 import { TerrainModel } from './terrainMesh';
 
@@ -59,6 +60,7 @@ export class CityModel {
   /** what removeRoofBumps found when the buildings arrived (for tools/inspect) */
   private roofBumps: RoofBumpResult | null = null;
   private features: FeatureSet | null = null;
+  private sea: SeaMask | null = null;
   private readonly pin: Group;
   private readonly accent: Color;
   /** pin position, metres from the centre (E, N) */
@@ -156,6 +158,15 @@ export class CityModel {
   }
 
   /** Buildings for the 3D print: footprints and roof heights as shown (m above the lowest point). */
+  /** Grid points under water (lakes, rivers drawn as areas, the sea) for sunken water in prints; null if none. */
+  printWater(): Uint8Array | null {
+    const areas = (this.features?.areas ?? []).filter((a) => a.kind === 'water').flatMap((a) => a.polys);
+    const sea = this.sea;
+    if (!areas.length && !sea) return null;
+    const mask = waterMask(this.grid, areas, sea ? (e, n) => isSea(sea, e, n) : undefined);
+    return mask.some((v) => v === 1) ? mask : null;
+  }
+
   printBuildings(): PrintBuilding[] {
     const b = this.buildings?.build;
     if (!b) return [];
@@ -212,6 +223,7 @@ export class CityModel {
       ? this.checkSea(seaMaskFromPolygons(features.sea, this.grid.sizeM, 1024))
       : this.seaFromCoastlines(features.coastlines);
     this.overlay.setSea(sea);
+    this.sea = sea;
     if (sea) {
       this.seaFraction = seaShare(sea);
       this.flattenSea(sea);

@@ -11,6 +11,7 @@ import { clampSize, decodeState, encodeState, formatArea, samePlace, type AreaSi
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
 import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
+import { depthInMetres, sinkWater, WATER_DEPTH_MM } from './export/water';
 import { addLabel, loadGlyphs } from './export/label';
 import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
@@ -791,6 +792,12 @@ function bindShare(): void {
     printMm = Number(v);
     updatePrintNote();
   });
+  /** The terrain for the print: water sunk when that's ticked and there is water in the square. */
+  const printGrid = (totalMm: number) => {
+    const mask = model && $<HTMLInputElement>('print-water').checked ? model.printWater() : null;
+    if (!model || !mask) return { grid: model!.grid, sunk: '' };
+    return { grid: sinkWater(model.grid, mask, depthInMetres(WATER_DEPTH_MM, totalMm, state.size, state.exaggeration)), sunk: ` Water sunk ${WATER_DEPTH_MM} mm.` };
+  };
   const tilesRange = $<HTMLInputElement>('tiles-range');
   tilesRange.max = String(MAX_TILES);
   tilesRange.addEventListener('input', () => {
@@ -873,7 +880,8 @@ function bindShare(): void {
         return;
       }
       const scale = printScale(state.size, printMm);
-      const tris = buildPrint(model.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration });
+      const terrain = printGrid(printMm);
+      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration });
       const brokenBuildings = tris.skipped;
       // the title raised on a ledge in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
@@ -884,7 +892,7 @@ function bindShare(): void {
       const size = depth ? `${printMm / 10} × ${(printMm + depth) / 10} cm with the title ledge` : `${printMm / 10} × ${printMm / 10} cm`;
       const left = brokenBuildings ? ` ${brokenBuildings} building${brokenBuildings === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
       const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${left}${missing}`;
+      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${terrain.sunk}${left}${missing}`;
     } catch (err) {
       console.error(err);
       msg.textContent = 'Couldn’t build the 3D print file on this device.';
@@ -899,7 +907,8 @@ function bindShare(): void {
     const n = printTiles;
     const totalMm = printMm * n;
     const scale = printScale(state.size, totalMm);
-    const tiles = buildTiledPrint(model.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, tiles: n });
+    const terrain = printGrid(totalMm);
+    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, tiles: n });
     const files: ZipEntry[] = tiles.map((t) => ({
       name: `tile-${t.name}.stl`,
       data: new Uint8Array(toBinaryStl(t.tris, `${name}, tile ${t.name} of ${n}x${n}, ${scale}`)),
@@ -930,7 +939,7 @@ function bindShare(): void {
     const mb = (zip.byteLength / 1048576).toFixed(zip.byteLength < 10485760 ? 1 : 0);
     const left = broken ? ` A building with a broken outline in the map data was left out.` : '';
     const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-    msg.textContent = `Saved: ${n * n} tiles of ${printMm / 10} cm, ${totalMm / 10} × ${totalMm / 10} cm in all${label ? ', and the title ledge as its own piece' : ''}, at ${scale}, ${new Intl.NumberFormat().format(triangles)} triangles (${mb} MB).${left}${missing}`;
+    msg.textContent = `Saved: ${n * n} tiles of ${printMm / 10} cm, ${totalMm / 10} × ${totalMm / 10} cm in all${label ? ', and the title ledge as its own piece' : ''}, at ${scale}, ${new Intl.NumberFormat().format(triangles)} triangles (${mb} MB).${terrain.sunk}${left}${missing}`;
   }
 }
 

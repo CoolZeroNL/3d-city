@@ -385,6 +385,7 @@ try {
     `STL is 100 mm wide on a 3 mm base, with the title ledge in front (${plain.size.map((v) => v.toFixed(2)).join(' × ')} mm)`,
   );
   expect(/^Saved: 10 × 1\d(\.\d)? cm with the title ledge at 1:20,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the print file and its ledge');
+  expect(/Water sunk 1 mm\./.test(await page.textContent('#share-msg')), 'the river in the test city is sunk 1 mm in the print');
   // your own title and a second line make the ledge deeper and name the file
   await page.fill('#print-title', 'Our first home');
   await page.fill('#print-subtitle', 'Where we met · June 2019');
@@ -392,7 +393,10 @@ try {
   expect(/^your-place-our-first-home-2km-10cm\.stl$/.test(titled.dl.suggestedFilename()) && titled.size[1] > plain.size[1] + 3, `your own title names the file and adds a second line (${titled.dl.suggestedFilename()}, ${titled.size[1].toFixed(1)} mm deep)`);
   // without the ledge: the plain square again
   await page.uncheck('#print-ledge');
+  await page.uncheck('#print-water');
   const bare = await printFile('06d-no-ledge.stl');
+  expect(!/Water sunk/.test(await page.textContent('#share-msg')), 'without the tick the water stays level');
+  await page.check('#print-water');
   expect(Math.abs(bare.size[0] - 100) < 0.01 && Math.abs(bare.size[1] - 100) < 0.01, `without the title the print is the plain square (${bare.size.map((v) => v.toFixed(2)).join(' × ')} mm)`);
   await page.check('#print-ledge');
   // tiles: 2 × 2 pieces of 10 cm in a ZIP, with the title ledge as its own piece

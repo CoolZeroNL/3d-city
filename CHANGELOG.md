@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 — 2026-11-06
+
+- Water sinks 1 mm into the 3D print: lakes, rivers mapped as areas and the sea sit a little below the land, so they stand out and have an edge to paint along. The same 1 mm at any scale and exaggeration, in one piece or in tiles; untick it in the share dialog to keep the water level. Suggested on Reddit.
+
 ## 1.3.1 — 2026-11-05
 
 - Prints in up to 8 × 8 tiles, for a model to hang on the wall: 64 tiles of 20 cm make 1.6 m across, and a 4 km area at that size is about 1:2,500. The tile choice is a slider now. Suggested on Reddit.
