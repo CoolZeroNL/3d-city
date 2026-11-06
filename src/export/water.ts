@@ -1,9 +1,10 @@
 /**
- * Sunken water for 3D prints: lakes, rivers drawn as areas, and the sea sit a little lower
- * than the land around them, so they stand out and have an edge to paint along.
+ * Sunken water and raised green areas for 3D prints: lakes, rivers drawn as areas and the sea
+ * sit a little lower than the land, parks, gardens and woods a little higher, so each has an
+ * edge to paint along.
  *
- * Only the print changes: a copy of the height grid with the water lowered, still measured
- * from the same lowest point, so buildings keep their heights. The bank follows the terrain
+ * Only the print changes: a copy of the height grid with those points moved, still measured
+ * from the same lowest point, so buildings keep their heights. The edge follows the terrain
  * grid, so it is a short slope one grid step wide rather than a sharp wall.
  */
 
@@ -12,6 +13,8 @@ import type { HeightGrid } from '../geo/terrain';
 
 /** How far water sits below the land in the print (mm), whatever the scale and exaggeration. */
 export const WATER_DEPTH_MM = 1;
+/** How far parks, gardens and woods stand above the land in the print (mm): three layers at 0.2 mm. */
+export const GREEN_RAISE_MM = 0.6;
 
 /** Grid points under water (1) or not (0): inside a water area but not on an island in it, or at sea. */
 export function waterMask(grid: HeightGrid, areas: Polygon[], seaAt?: (e: number, n: number) => boolean): Uint8Array {
@@ -40,12 +43,18 @@ export function waterMask(grid: HeightGrid, areas: Polygon[], seaAt?: (e: number
   return mask;
 }
 
-/** The grid with water lowered by `depthM` (m); `min` stays, so every height keeps its reference. */
-export function sinkWater(grid: HeightGrid, mask: Uint8Array, depthM: number): HeightGrid {
+/** Grid points inside any of the areas (not in their holes). */
+export const areaMask = (grid: HeightGrid, areas: Polygon[]): Uint8Array => waterMask(grid, areas);
+
+/** The grid with the masked points moved up by `dzM` (m; down if negative); `min` stays, so every height keeps its reference. */
+export function shiftMasked(grid: HeightGrid, mask: Uint8Array, dzM: number): HeightGrid {
   const elev = Float32Array.from(grid.elev);
-  for (let k = 0; k < elev.length; k++) if (mask[k]) elev[k] -= depthM;
+  for (let k = 0; k < elev.length; k++) if (mask[k]) elev[k] += dzM;
   return { ...grid, elev };
 }
+
+/** The grid with water lowered by `depthM` (m). */
+export const sinkWater = (grid: HeightGrid, mask: Uint8Array, depthM: number): HeightGrid => shiftMasked(grid, mask, -depthM);
 
 /** Metres of terrain that make `depthMm` in a print `printMm` wide of a square `sizeM` wide, at this exaggeration. */
 export const depthInMetres = (depthMm: number, printMm: number, sizeM: number, exaggeration: number) => depthMm / ((printMm / sizeM) * exaggeration);

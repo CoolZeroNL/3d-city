@@ -384,7 +384,7 @@ try {
     /-10cm\.stl$/.test(plain.dl.suggestedFilename()) && Math.abs(plain.size[0] - 100) < 0.01 && plain.size[1] > 105 && plain.size[1] < 120 && Math.abs(plain.lo[2] + 3) < 1e-4 && plain.hi[2] > 5,
     `STL is 100 mm wide on a 3 mm base, with the title ledge in front (${plain.size.map((v) => v.toFixed(2)).join(' × ')} mm)`,
   );
-  expect(/^Saved: 10 × 1\d(\.\d)? cm with the title ledge at 1:20,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the print file and its ledge');
+  expect(/^Saved: 10 × 1\d(\.\d)? cm with the title strip at 1:20,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the print file and its ledge');
   expect(/Water sunk 1 mm\./.test(await page.textContent('#share-msg')), 'the river in the test city is sunk 1 mm in the print');
   // your own title and a second line make the ledge deeper and name the file
   await page.fill('#print-title', 'Our first home');
@@ -398,6 +398,18 @@ try {
   expect(!/Water sunk/.test(await page.textContent('#share-msg')), 'without the tick the water stays level');
   await page.check('#print-water');
   expect(Math.abs(bare.size[0] - 100) < 0.01 && Math.abs(bare.size[1] - 100) < 0.01, `without the title the print is the plain square (${bare.size.map((v) => v.toFixed(2)).join(' × ')} mm)`);
+  // raised roads and parks: their own pieces on the terrain, and the dialog says so
+  await page.check('#print-roads');
+  await page.check('#print-green');
+  const painted = await printFile('06h-roads-green.stl');
+  const paintedMsg = await page.textContent('#share-msg');
+  expect(
+    /Roads raised 0\.4 mm\./.test(paintedMsg) && painted.count > bare.count + 1000 && Math.abs(painted.size[0] - 100) < 0.01 && Math.abs(painted.size[1] - 100) < 0.01,
+    `raised roads add ${painted.count - bare.count} triangles and stay inside the square (${painted.size.map((v) => v.toFixed(2)).join(' × ')} mm)`,
+  );
+  expect(/Parks and woods raised 0\.6 mm\./.test(paintedMsg), 'the park and the forest in the test city are raised');
+  await page.uncheck('#print-roads');
+  await page.uncheck('#print-green');
   await page.check('#print-ledge');
   // tiles: 2 × 2 pieces of 10 cm in a ZIP, with the title ledge as its own piece
   const setTiles = (n) =>
@@ -437,7 +449,7 @@ try {
     `each tile is 100 × 100 mm on the same 3 mm base (${tileSizes.map((b) => b.size.map((v) => v.toFixed(1)).join('×')).join(', ')})`,
   );
   expect(/A1 is the north-west corner/.test(files['README.txt'].toString()) && /sits 1 mm below the land/.test(files['README.txt'].toString()), 'the note in the ZIP explains how the tiles go together and that the water is sunk');
-  expect(/^Saved: 4 tiles of 10 cm, 20 × 20 cm in all, and the title ledge as its own piece, at 1:10,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the tiles');
+  expect(/^Saved: 4 tiles of 10 cm, 20 × 20 cm in all, and the title strip as its own piece, at 1:10,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the tiles');
   // the largest split, in the browser: 64 tiles in one ZIP
   await setTiles(8);
   const t8 = Date.now();

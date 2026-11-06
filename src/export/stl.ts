@@ -4,7 +4,8 @@
  * The print is a set of closed shells that slicers union:
  *  - the terrain block: the height grid as the top, four side walls down to a
  *    flat base, and a bottom — one watertight shell;
- *  - one prism per building, from inside the block up to its roof.
+ *  - one prism per building, from inside the block up to its roof;
+ *  - optionally raised roads: short pieces whose tops follow the terrain (roads.ts).
  * A building column that starts below the terrain surface is buried in the
  * block, so the union is exactly "building above ground" — no gaps on slopes.
  * Every shell is closed with outward-facing triangles, so slicers (PrusaSlicer,
@@ -15,6 +16,7 @@ import earcut, { deviation } from 'earcut';
 import polygonClipping from 'polygon-clipping';
 import { signedArea, type Polygon } from '../geo/polygon';
 import type { HeightGrid } from '../geo/terrain';
+import { addRoads, type PrintRoad } from './roads';
 
 /** A building for print: footprint (m from the centre) and roof height (m above the lowest terrain point, exaggeration applied). */
 export interface PrintBuilding {
@@ -80,8 +82,8 @@ export class Triangles {
 const UP: V = [0, 0, 1];
 const DOWN: V = [0, 0, -1];
 
-/** Build the print as triangles (mm). */
-export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: PrintOptions): Triangles {
+/** Build the print as triangles (mm), with raised roads if any are given. */
+export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: PrintOptions, roads: PrintRoad[] = []): Triangles {
   const t = new Triangles();
   const s = opts.sideMm / grid.sizeM; // mm per metre
   const base = -opts.baseMm;
@@ -94,6 +96,7 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
     // their outlines are identical (an outline and its building part)
     addPrism(t, b.poly, b.top * s, bottom - gap * 0.3 * (i % 97), s, gap * (1 + 0.4 * (i % 5)));
   });
+  if (roads.length) addRoads(t, grid, roads, { s, exaggeration: opts.exaggeration });
   return t;
 }
 

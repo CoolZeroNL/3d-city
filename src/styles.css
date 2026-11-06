@@ -1152,3 +1152,20 @@ input[type='range'] {
 .print-block .tiles-label {
   margin-top: 6px;
 }
+
+.paint-set {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.paint-set legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPrint, type Triangles } from '../src/export/stl';
 import { buildTiledPrint } from '../src/export/tiles';
-import { depthInMetres, sinkWater, waterMask, WATER_DEPTH_MM } from '../src/export/water';
+import { areaMask, depthInMetres, GREEN_RAISE_MM, shiftMasked, sinkWater, waterMask, WATER_DEPTH_MM } from '../src/export/water';
 import type { Polygon } from '../src/geo/polygon';
 import type { HeightGrid } from '../src/geo/terrain';
 
@@ -77,5 +77,23 @@ describe('sunken water in prints', () => {
     // at (-156.25, 156.25) is (93.75, -93.75) m from the tile's centre, 0.2 mm per metre
     const [x, y] = [93.75 * 0.2, -93.75 * 0.2];
     expect(topAt(plain[0].tris, x, y) - topAt(tiles[0].tris, x, y)).toBeCloseTo(1, 3);
+  });
+
+  it(`raises parks and woods ${GREEN_RAISE_MM} mm, and keeps the water sunk inside them`, () => {
+    const g = slope();
+    const park: Polygon = { outer: ring(-300, -300, 300, 300), holes: [] };
+    const opts = { sideMm: 100, baseMm: 3, exaggeration: 2 };
+    const plain = buildPrint(g, [], opts);
+    const water = waterMask(g, [lake]);
+    const green = areaMask(g, [park]);
+    for (let k = 0; k < green.length; k++) if (water[k]) green[k] = 0; // as CityModel.printGreen does
+    const metres = (mm: number) => depthInMetres(mm, 100, 1000, 2);
+    const both = buildPrint(shiftMasked(sinkWater(g, water, metres(WATER_DEPTH_MM)), green, metres(GREEN_RAISE_MM)), [], opts);
+    const mm = (m: number) => m * 0.1;
+    expect(topAt(both, mm(-250), mm(-250)) - topAt(plain, mm(-250), mm(-250))).toBeCloseTo(GREEN_RAISE_MM, 4); // in the park
+    expect(topAt(plain, mm(-156.25), 0) - topAt(both, mm(-156.25), 0)).toBeCloseTo(WATER_DEPTH_MM, 4); // its lake
+    expect(topAt(both, 0, 0) - topAt(plain, 0, 0)).toBeCloseTo(GREEN_RAISE_MM, 4); // the island is park too
+    expect(topAt(both, mm(-406.25), 0)).toBeCloseTo(topAt(plain, mm(-406.25), 0), 5); // outside it
+    expect(closedShells(both)).toBe(true);
   });
 });

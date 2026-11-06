@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 — unreleased
+
+- Raised roads in the 3D print: roads, paths and railways stand 0.4 mm above the ground with sharp edges, as their own pieces that follow the terrain, so they're easy to paint. At small scales only the roads wide enough to print are kept. Off by default; tick it in the share dialog. Suggested on Reddit.
+- Raised parks and woods: parks, gardens, pitches and woods stand 0.6 mm above the land (water inside them stays sunk). Off by default. Suggested on Reddit.
+- Clearer wording for the title option: "Add the title in raised letters on a strip in front".
+
 ## 1.3.2 — 2026-11-06
 
 - Water sinks 1 mm into the 3D print: lakes, rivers mapped as areas and the sea sit a little below the land, so they stand out and have an edge to paint along. The same 1 mm at any scale and exaggeration, in one piece or in tiles; untick it in the share dialog to keep the water level. Suggested on Reddit.

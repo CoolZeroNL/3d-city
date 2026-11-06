@@ -22,7 +22,8 @@ works on your phone.**
 - **Share it:** the link opens the same view with the same house pinned. It holds coordinates only, never the address you typed.
 - **Keep it:** download a poster image with the place name and coordinates, or an STL file to 3D print
   (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300), in one piece or in up to 8 × 8 tiles that fit your
-  print bed. Water sits 1 mm below the land, easy to paint. Every exported shell is checked to be watertight.
+  print bed. For painting, water sits 1 mm below the land, and roads (0.4 mm) and parks and woods (0.6 mm)
+  can stand above it. Every exported shell is checked to be watertight.
 
 ## Controls
 
@@ -108,6 +109,13 @@ Design notes:
   left out, and the dialog says so. Checked with trimesh on live data for Stuttgart 2 and 4 km,
   Barcelona's Eixample, Berlin courtyards, Hong Kong and a village: 38,692 shells, all watertight
   and outward-facing; one Barcelona building was left out.
+- **Raised roads are their own pieces, not carved into the terrain.** The height grid's points are
+  4–10 m apart, coarser than most roads, so a road in the grid would be a soft groove. Instead each
+  road is cut into short pieces wherever the ground under it bends; each piece is a closed shell whose
+  top follows the printed terrain (the same two triangles per grid cell) 0.4 mm up and whose floor is
+  buried in the block. Corners up to 90° are mitred, sharper ones get an octagon, and pieces overlap
+  slightly instead of sharing faces. Roads thinner than 0.3 mm at true scale are left out, the rest
+  are at least 0.5 mm wide, and bridges keep a level deck between their ends.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
 ## Technical choices

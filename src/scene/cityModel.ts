@@ -24,7 +24,8 @@ import {
 } from './buildingsMesh';
 import { makeElevationUniforms, patchBuildingMaterial, type ElevationUniforms } from './materials';
 import type { PrintBuilding } from '../export/stl';
-import { waterMask } from '../export/water';
+import type { PrintRoad } from '../export/roads';
+import { areaMask, waterMask } from '../export/water';
 import { Overlay } from './overlay';
 import { TerrainModel } from './terrainMesh';
 
@@ -45,6 +46,9 @@ export interface PinHit {
   n: number;
   building: boolean;
 }
+
+/** Line kinds that are water, not roads. */
+const WATER_LINES = new Set(['river', 'canal', 'stream']);
 
 /** Buildings up to this size (m) get the pin in their middle; bigger ones where they were tapped. */
 const PIN_MIDDLE_MAX_M = 40;
@@ -157,7 +161,6 @@ export class CityModel {
     return { e: this.pinAt[0], n: this.pinAt[1], buildings: this.pinned.length, marked: this.markPinned && this.pinned.length > 0 };
   }
 
-  /** Buildings for the 3D print: footprints and roof heights as shown (m above the lowest point). */
   /** Grid points under water (lakes, rivers drawn as areas, the sea) for sunken water in prints; null if none. */
   printWater(): Uint8Array | null {
     const areas = (this.features?.areas ?? []).filter((a) => a.kind === 'water').flatMap((a) => a.polys);
@@ -167,6 +170,22 @@ export class CityModel {
     return mask.some((v) => v === 1) ? mask : null;
   }
 
+  /** Grid points in parks, gardens, pitches and woods, but not in water, for raised green in prints; null if none. */
+  printGreen(): Uint8Array | null {
+    const areas = (this.features?.areas ?? []).filter((a) => a.kind === 'green' || a.kind === 'forest').flatMap((a) => a.polys);
+    if (!areas.length) return null;
+    const mask = areaMask(this.grid, areas);
+    const water = this.printWater();
+    if (water) for (let k = 0; k < mask.length; k++) if (water[k]) mask[k] = 0;
+    return mask.some((v) => v === 1) ? mask : null;
+  }
+
+  /** Roads, paths and railways for raised roads in prints, as on the map (tunnels are already left out). */
+  printRoads(): PrintRoad[] {
+    return (this.features?.lines ?? []).filter((l) => !WATER_LINES.has(l.kind)).map((l) => ({ pts: l.pts, widthM: l.widthM, bridge: l.bridge }));
+  }
+
+  /** Buildings for the 3D print: footprints and roof heights as shown (m above the lowest point). */
   printBuildings(): PrintBuilding[] {
     const b = this.buildings?.build;
     if (!b) return [];

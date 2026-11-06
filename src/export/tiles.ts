@@ -11,6 +11,7 @@
 import { clipBuildingToRect } from '../geo/clip';
 import type { Polygon } from '../geo/polygon';
 import { sampleGrid, type HeightGrid } from '../geo/terrain';
+import type { PrintRoad } from './roads';
 import { buildPrint, type PrintBuilding, type PrintOptions, type Triangles } from './stl';
 
 /** Up to 8 × 8 tiles: 20 cm tiles make a 1.6 m model for a wall. */
@@ -54,7 +55,7 @@ const shift = (poly: Polygon, dx: number, dy: number): Polygon => ({
  * Build the print as n × n tiles, each `opts.sideMm` wide. Tiles come row by row from the
  * north-west; each is centred on its own origin, as a single print is.
  */
-export function buildTiledPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: PrintOptions & { tiles: number }): PrintTile[] {
+export function buildTiledPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: PrintOptions & { tiles: number }, roads: PrintRoad[] = []): PrintTile[] {
   const n = Math.max(1, Math.round(opts.tiles));
   const out: PrintTile[] = [];
   for (let row = 0; row < n; row++) {
@@ -70,7 +71,15 @@ export function buildTiledPrint(grid: HeightGrid, buildings: PrintBuilding[], op
       for (const b of buildings) {
         for (const poly of clipBuildingToRect(b.poly, x0, y0, x1, y1)) pieces.push({ poly: shift(poly, cx, cy), top: b.top });
       }
-      const tris = buildPrint(tileGrid(grid, x0, y0, x1, y1, n), pieces, opts);
+      // roads near the tile, moved to its centre; buildPrint cuts them at the tile's edges
+      const margin = 50; // m: wider than any road, even at its smallest printed width
+      const near = roads
+        .filter((r) => r.pts.some(([x, y], k) => {
+          const [px, py] = r.pts[Math.max(0, k - 1)];
+          return Math.max(x, px) >= x0 - margin && Math.min(x, px) <= x1 + margin && Math.max(y, py) >= y0 - margin && Math.min(y, py) <= y1 + margin;
+        }))
+        .map((r) => ({ ...r, pts: r.pts.map(([x, y]) => [x - cx, y - cy] as [number, number]) }));
+      const tris = buildPrint(tileGrid(grid, x0, y0, x1, y1, n), pieces, opts, near);
       out.push({ name: tileName(row, col), row, col, tris });
     }
   }

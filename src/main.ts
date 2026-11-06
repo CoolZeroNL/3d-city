@@ -11,7 +11,8 @@ import { clampSize, decodeState, encodeState, formatArea, samePlace, type AreaSi
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
 import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
-import { depthInMetres, sinkWater, WATER_DEPTH_MM } from './export/water';
+import { depthInMetres, GREEN_RAISE_MM, shiftMasked, sinkWater, WATER_DEPTH_MM } from './export/water';
+import { ROAD_RAISE_MM, type PrintRoad } from './export/roads';
 import { addLabel, loadGlyphs } from './export/label';
 import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
@@ -792,11 +793,33 @@ function bindShare(): void {
     printMm = Number(v);
     updatePrintNote();
   });
-  /** The terrain for the print: water sunk when that's ticked and there is water in the square. */
-  const printGrid = (totalMm: number) => {
-    const mask = model && $<HTMLInputElement>('print-water').checked ? model.printWater() : null;
-    if (!model || !mask) return { grid: model!.grid, sunk: '' };
-    return { grid: sinkWater(model.grid, mask, depthInMetres(WATER_DEPTH_MM, totalMm, state.size, state.exaggeration)), sunk: ` Water sunk ${WATER_DEPTH_MM} mm.` };
+  /**
+   * The print's terrain and roads, as ticked: water sunk, parks and woods raised (where the square
+   * has them), raised roads. `done` lists what was changed, for the message and the tiles' note.
+   */
+  const printLayers = (totalMm: number) => {
+    const m = model!;
+    const metres = (mm: number) => depthInMetres(mm, totalMm, state.size, state.exaggeration);
+    let grid = m.grid;
+    const done = { water: false, green: false, roads: false };
+    const water = $<HTMLInputElement>('print-water').checked ? m.printWater() : null;
+    if (water) {
+      grid = sinkWater(grid, water, metres(WATER_DEPTH_MM));
+      done.water = true;
+    }
+    const green = $<HTMLInputElement>('print-green').checked ? m.printGreen() : null;
+    if (green) {
+      grid = shiftMasked(grid, green, metres(GREEN_RAISE_MM));
+      done.green = true;
+    }
+    const roads: PrintRoad[] = $<HTMLInputElement>('print-roads').checked ? m.printRoads() : [];
+    done.roads = roads.length > 0;
+    const note = [
+      done.water ? ` Water sunk ${WATER_DEPTH_MM} mm.` : '',
+      done.green ? ` Parks and woods raised ${GREEN_RAISE_MM} mm.` : '',
+      done.roads ? ` Roads raised ${ROAD_RAISE_MM} mm.` : '',
+    ].join('');
+    return { grid, roads, done, note };
   };
   const tilesRange = $<HTMLInputElement>('tiles-range');
   tilesRange.max = String(MAX_TILES);
@@ -880,19 +903,19 @@ function bindShare(): void {
         return;
       }
       const scale = printScale(state.size, printMm);
-      const terrain = printGrid(printMm);
-      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration });
+      const terrain = printLayers(printMm);
+      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration }, terrain.roads);
       const brokenBuildings = tris.skipped;
-      // the title raised on a ledge in front of the model
+      // the title in raised letters on a strip in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
       const stl = toBinaryStl(tris, `${name}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
       saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${printMm / 10}cm.stl`));
       const mb = (stl.byteLength / 1048576).toFixed(stl.byteLength < 10485760 ? 1 : 0);
       const depth = label ? Math.round(label.depthMm) : 0;
-      const size = depth ? `${printMm / 10} × ${(printMm + depth) / 10} cm with the title ledge` : `${printMm / 10} × ${printMm / 10} cm`;
+      const size = depth ? `${printMm / 10} × ${(printMm + depth) / 10} cm with the title strip` : `${printMm / 10} × ${printMm / 10} cm`;
       const left = brokenBuildings ? ` ${brokenBuildings} building${brokenBuildings === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
       const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${terrain.sunk}${left}${missing}`;
+      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${terrain.note}${left}${missing}`;
     } catch (err) {
       console.error(err);
       msg.textContent = 'Couldn’t build the 3D print file on this device.';
@@ -901,14 +924,14 @@ function bindShare(): void {
     }
   });
 
-  /** The print as n × n tiles in a ZIP, with the title ledge as its own piece and a note on the layout. */
+  /** The print as n × n tiles in a ZIP, with the title strip as its own piece and a note on the layout. */
   async function saveTiles(name: string): Promise<void> {
     if (!model) return;
     const n = printTiles;
     const totalMm = printMm * n;
     const scale = printScale(state.size, totalMm);
-    const terrain = printGrid(totalMm);
-    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, tiles: n });
+    const terrain = printLayers(totalMm);
+    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, tiles: n }, terrain.roads);
     const files: ZipEntry[] = tiles.map((t) => ({
       name: `tile-${t.name}.stl`,
       data: new Uint8Array(toBinaryStl(t.tris, `${name}, tile ${t.name} of ${n}x${n}, ${scale}`)),
@@ -919,7 +942,7 @@ function bindShare(): void {
     if ($<HTMLInputElement>('print-ledge').checked) {
       const ledge = new Triangles();
       label = addLabel(ledge, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM);
-      if (label) files.push({ name: 'title.stl', data: new Uint8Array(toBinaryStl(ledge, `${name}, title ledge`)) });
+      if (label) files.push({ name: 'title.stl', data: new Uint8Array(toBinaryStl(ledge, `${name}, title strip`)) });
     }
     const last = tileName(n - 1, n - 1);
     const readme = [
@@ -928,8 +951,10 @@ function bindShare(): void {
       '',
       `Tiles are named by row and column like a map grid: row A is the north edge (the back), column 1 the west (left).`,
       `A1 is the north-west corner, ${last} the south-east. Print each tile flat, base down, at 100%; they fit edge to edge.`,
-      label ? 'title.stl is the title ledge: put it in front of the bottom row, in the middle.' : '',
-      terrain.sunk ? `Water (lakes, rivers mapped as areas, the sea) sits ${WATER_DEPTH_MM} mm below the land, with an edge to paint along.` : '',
+      label ? 'title.stl is the title strip: put it in front of the bottom row, in the middle.' : '',
+      terrain.done.water ? `Water (lakes, rivers mapped as areas, the sea) sits ${WATER_DEPTH_MM} mm below the land, with an edge to paint along.` : '',
+      terrain.done.green ? `Parks, gardens and woods stand ${GREEN_RAISE_MM} mm above the land.` : '',
+      terrain.done.roads ? `Roads, paths and railways stand ${ROAD_RAISE_MM} mm above the ground, with sharp edges.` : '',
       '',
       'Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen terrain tiles on AWS Open Data.',
     ].filter((l, i, a) => l || a[i - 1]).join('\n');
@@ -940,7 +965,7 @@ function bindShare(): void {
     const mb = (zip.byteLength / 1048576).toFixed(zip.byteLength < 10485760 ? 1 : 0);
     const left = broken ? ` A building with a broken outline in the map data was left out.` : '';
     const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-    msg.textContent = `Saved: ${n * n} tiles of ${printMm / 10} cm, ${totalMm / 10} × ${totalMm / 10} cm in all${label ? ', and the title ledge as its own piece' : ''}, at ${scale}, ${new Intl.NumberFormat().format(triangles)} triangles (${mb} MB).${terrain.sunk}${left}${missing}`;
+    msg.textContent = `Saved: ${n * n} tiles of ${printMm / 10} cm, ${totalMm / 10} × ${totalMm / 10} cm in all${label ? ', and the title strip as its own piece' : ''}, at ${scale}, ${new Intl.NumberFormat().format(triangles)} triangles (${mb} MB).${terrain.note}${left}${missing}`;
   }
 }
 
