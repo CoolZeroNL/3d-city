@@ -1,13 +1,13 @@
 import './styles.css';
-import { KIND_LABEL, resolveToSettlement, reverse, type Place } from './geo/geocode';
-import { buildingsQuery, compassWord, featuresQuery, formatDistance, overpass, parseBuildings, parseFeatures, parseSettlements, pickSettlement, settlementsQuery, type FeatureSet, type Settlement, type SettlementKind } from './geo/osm';
+import { resolveToSettlement, reverse, type Place } from './geo/geocode';
+import { buildingsQuery, featuresQuery, overpass, parseBuildings, parseFeatures, parseSettlements, pickSettlement, settlementsQuery, type FeatureSet, type Settlement, type SettlementKind } from './geo/osm';
 import { DATA_ZOOM, fetchTiles, parseTiles, settlementsFromTiles, tilesForSquare } from './geo/tiles';
 import { formatLatLon, makeProjector, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
 import { CityModel } from './scene/cityModel';
 import { BUILDING_COLOURS, HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
-import { clampSize, decodeState, encodeState, formatArea, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
+import { clampSize, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
 import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
@@ -18,20 +18,23 @@ import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
 import { NoticeView } from './ui/notice';
 import { StatusView } from './ui/status';
+import { area, direction, distance, num, scale as localScale, t, translatePage } from './i18n';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const PRESETS: Array<{ name: string; detail: string; center: LngLat; size: AreaSize; ex: number }> = [
-  { name: 'Stuttgart', detail: 'City in a valley basin', center: { lat: 48.7765, lon: 9.1772 }, size: 4000, ex: 2 },
-  { name: 'Heidelberg', detail: 'Old town on the Neckar', center: { lat: 49.4106, lon: 8.7065 }, size: 2000, ex: 1.5 },
-  { name: 'Edinburgh', detail: 'Castle Rock & Arthur’s Seat', center: { lat: 55.9496, lon: -3.1835 }, size: 4000, ex: 1.5 },
-  { name: 'Lisbon', detail: 'Seven hills on the Tagus', center: { lat: 38.7139, lon: -9.1365 }, size: 2000, ex: 2 },
-  { name: 'San Francisco', detail: 'Nob Hill to the Bay', center: { lat: 37.7935, lon: -122.4075 }, size: 2000, ex: 1.5 },
-  { name: 'Hong Kong', detail: 'Central under the Peak', center: { lat: 22.2795, lon: 114.1605 }, size: 2000, ex: 1 },
+  { name: 'Stuttgart', detail: t.presets.stuttgart, center: { lat: 48.7765, lon: 9.1772 }, size: 4000, ex: 2 },
+  { name: 'Heidelberg', detail: t.presets.heidelberg, center: { lat: 49.4106, lon: 8.7065 }, size: 2000, ex: 1.5 },
+  { name: 'Edinburgh', detail: t.presets.edinburgh, center: { lat: 55.9496, lon: -3.1835 }, size: 4000, ex: 1.5 },
+  { name: 'Lisbon', detail: t.presets.lisbon, center: { lat: 38.7139, lon: -9.1365 }, size: 2000, ex: 2 },
+  { name: 'San Francisco', detail: t.presets.sanFrancisco, center: { lat: 37.7935, lon: -122.4075 }, size: 2000, ex: 1.5 },
+  { name: 'Hong Kong', detail: t.presets.hongKong, center: { lat: 22.2795, lon: 114.1605 }, size: 2000, ex: 1 },
 ];
 
 // ------------------------------------------------------------------ state
 
+// the page's texts in the visitor's language, before anything reads them
+translatePage();
 const app = $('app');
 /** the landing page's title; a loaded place puts its name in the tab instead */
 const HOME_TITLE = document.title;
@@ -41,6 +44,8 @@ const OWN_KEY = 'yp:own';
 let inviteOwn = !!state.center && !readFlag(OWN_KEY);
 let model: CityModel | null = null;
 let placeLabel = '';
+/** set when a shared link to open country is named after the nearest village */
+let placeNear = '';
 let loadToken = 0;
 let abort: AbortController | null = null;
 const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c8431a';
@@ -195,8 +200,8 @@ async function resolvePick(p: Place): Promise<Place> {
     chosen = list.filter((s) => s.kind === biggest).sort((a, b) => a.distanceM - b.distanceM)[0];
   }
   if (!chosen) return p;
-  const context = p.kind === 'postcode' ? `Postcode ${p.label}` : p.label;
-  return { label: chosen.name, detail: `${context} · ${KIND_LABEL[chosen.kind]}`, center: chosen.center, kind: chosen.kind };
+  const context = p.kind === 'postcode' ? t.postcodeOf(p.label) : p.label;
+  return { label: chosen.name, detail: `${context} · ${t.kind[chosen.kind]}`, center: chosen.center, kind: chosen.kind };
 }
 
 async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}): Promise<void> {
@@ -209,7 +214,7 @@ async function openPlace(p: Place, opts: { size?: AreaSize; ex?: number } = {}):
   const token = ++pickToken;
   // Never leave the user waiting silently: a visible spinner, and a hard time limit after
   // which the model loads at the original point (the empty-square offer still helps there).
-  if (p.kind === 'postcode' || p.kind === 'area') status.busy(`Finding the village for ${p.label}…`);
+  if (p.kind === 'postcode' || p.kind === 'area') status.busy(t.findingVillage(p.label));
   const target = await withinBudget(resolvePick(p), RESOLVE_BUDGET_MS, p);
   if (token !== pickToken) return;
   await loadPlace(target.center, { label: target.label, detail: target.detail });
@@ -224,22 +229,19 @@ async function offerNearby(center: LngLat, size: AreaSize, count: number, stale:
     return;
   }
   if (stale()) return;
-  const here = count === 0 ? 'No buildings are mapped here' : `Only ${count} building${count === 1 ? ' is' : 's are'} mapped here`;
+  const here = count === 0 ? t.noBuildingsHere : t.fewBuildingsHere(num(count), count);
   // places inside the square are what is empty: suggest the best one outside it
   const best = pickSettlement(list, size * 0.6);
   if (!best) {
     const inside = pickSettlement(list);
     notice.show(
-      inside
-        ? `${here} — OpenStreetMap has few buildings mapped around ${inside.name} so far.`
-        : `${here}, and there’s no village or town within ${RESCUE_RADIUS_M / 1000} km.`,
-      size < 4000 ? [{ label: 'Show 4 × 4 km', onClick: () => setSize(4000) }] : [],
+      inside ? t.fewAround(here, inside.name) : t.noVillageWithin(here, num(RESCUE_RADIUS_M / 1000)),
+      size < 4000 ? [{ label: t.show4km, onClick: () => setSize(4000) }] : [],
     );
     return;
   }
-  const kind = KIND_LABEL[best.kind].toLowerCase();
-  notice.show(`${here}. ${best.name} (${kind}) is ${formatDistance(best.distanceM)} ${compassWord(best.bearingDeg)}.`, [
-    { label: `Go to ${best.name}`, primary: true, onClick: () => void openPlace({ label: best.name, detail: KIND_LABEL[best.kind], center: best.center, kind: best.kind }) },
+  notice.show(t.nearest(here, best.name, t.kindInSentence[best.kind], distance(best.distanceM), direction(best.bearingDeg)), [
+    { label: t.goTo(best.name), primary: true, onClick: () => void openPlace({ label: best.name, detail: t.kind[best.kind], center: best.center, kind: best.kind }) },
   ]);
 }
 
@@ -263,6 +265,7 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
   state.camera = opts.camera ?? null;
   setMode('model');
   placeLabel = opts.label ?? '';
+  placeNear = '';
   setPlaceTitle(opts.label || formatLatLon(center), opts.detail ?? '');
   if (!opts.label) {
     reverse(center, signal).then((p) => {
@@ -362,7 +365,8 @@ async function loadPlace(center: LngLat, opts: { label?: string; detail?: string
     if (stale() || placeLabel) return;
     const near = pickSettlement(list.filter((s) => s.distanceM < 4000));
     if (!near) return;
-    placeLabel = `Near ${near.name}`;
+    placeLabel = t.near(near.name);
+    placeNear = near.name;
     setPlaceTitle(placeLabel, placeMetaDetail);
     describe();
   });
@@ -418,9 +422,9 @@ function offerOwnPlace(): void {
   const token = loadToken;
   window.setTimeout(() => {
     if (token !== loadToken || notice.visible) return;
-    notice.show('This place was shared with you. Make one of your own: your street, your first home, where you met.', [
+    notice.show(t.sharedInvite, [
       {
-        label: 'Make my place',
+        label: t.makeMyPlace,
         primary: true,
         onClick: () => {
           notice.hide();
@@ -456,9 +460,9 @@ function movePinTo(x: number, y: number): void {
   state.pin = makeProjector(state.center).toLngLat(hit.e, hit.n);
   viewer.requestRender();
   writeHash();
-  notice.show(hit.building ? 'Pin moved to this building. Share links now show it.' : 'Pin moved here. Share links now show this spot.', [
-    { label: 'Centre here', primary: true, onClick: centreOnPin },
-    { label: 'Reset pin', onClick: resetPin },
+  notice.show(hit.building ? t.pinOnBuilding : t.pinOnSpot, [
+    { label: t.centreHere, primary: true, onClick: centreOnPin },
+    { label: t.resetPin, onClick: resetPin },
   ]);
 }
 
@@ -491,8 +495,8 @@ function showGestureTip(): void {
 
 function gestureHint(): string {
   return coarse.matches
-    ? 'Tap a building to pin it · two fingers slide and zoom · double-tap loads the area there'
-    : 'Click a building to pin it · right-drag or Shift-drag slides the model · double-click loads the area there';
+    ? t.gestureTouch
+    : t.gestureMouse;
 }
 
 /** Double-click (or double-tap) a spot: pin it and build a new square around it. */
@@ -502,7 +506,7 @@ function bindDoubleClick(): void {
     if (!viewer.pick(x, y)) return;
     movePinTo(x, y);
     notice.hide();
-    toast('Loading the area around this spot');
+    toast(t.loadingHere);
     centreOnPin();
   });
 }
@@ -531,11 +535,11 @@ function bindMouseHint(): void {
 }
 
 function locate(): void {
-  if (!('geolocation' in navigator)) return status.say('Location is not available in this browser.');
-  status.say('Finding your location…');
+  if (!('geolocation' in navigator)) return status.say(t.noGeolocation);
+  status.say(t.findingLocation);
   navigator.geolocation.getCurrentPosition(
-    (pos) => void openPlace({ label: 'Your location', detail: '', center: { lat: pos.coords.latitude, lon: pos.coords.longitude } }),
-    (err) => status.say(err.code === err.PERMISSION_DENIED ? 'Location permission was denied.' : 'Couldn’t get your location.'),
+    (pos) => void openPlace({ label: t.yourLocation, detail: '', center: { lat: pos.coords.latitude, lon: pos.coords.longitude } }),
+    (err) => status.say(err.code === err.PERMISSION_DENIED ? t.locationDenied : t.locationFailed),
     { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
   );
 }
@@ -551,14 +555,14 @@ function setMode(mode: 'landing' | 'model'): void {
 function setPlaceTitle(title: string, detail: string): void {
   $('place-title').textContent = title;
   // tabs, history and bookmarks name the place
-  document.title = `${title} in 3D · Your Place`;
+  document.title = t.docTitle(title);
   placeMetaDetail = detail;
   updateMeta();
 }
 
 let placeMetaDetail = '';
 function updateMeta(): void {
-  const parts = [placeMetaDetail, formatArea(state.size), `terrain ×${state.exaggeration.toFixed(1)}`].filter(Boolean);
+  const parts = [placeMetaDetail, area(state.size), t.terrainTimes(num(state.exaggeration, 1))].filter(Boolean);
   $('place-meta').textContent = parts.join(' · ');
 }
 
@@ -574,7 +578,7 @@ function bindControls(): void {
   let exFrame = 0;
   ex.addEventListener('input', () => {
     state.exaggeration = Number(ex.value);
-    $('ex-out').textContent = `×${state.exaggeration.toFixed(1)}`;
+    $('ex-out').textContent = `×${num(state.exaggeration, 1)}`;
     updateMeta();
     cancelAnimationFrame(exFrame);
     exFrame = requestAnimationFrame(() => {
@@ -605,7 +609,7 @@ function bindControls(): void {
   // the area: the readout follows the slider, the model loads when it's let go (a pause for keys)
   const sizeRange = $<HTMLInputElement>('size-range');
   let sizeTimer = 0;
-  sizeRange.addEventListener('input', () => ($('size-out').textContent = formatArea(clampSize(Number(sizeRange.value)))));
+  sizeRange.addEventListener('input', () => ($('size-out').textContent = area(clampSize(Number(sizeRange.value)))));
   sizeRange.addEventListener('change', () => {
     window.clearTimeout(sizeTimer);
     sizeTimer = window.setTimeout(() => setSize(Number(sizeRange.value)), 350);
@@ -652,10 +656,10 @@ function radioGroup(id: string, onChange: (value: string) => void): void {
 function syncControls(): void {
   const ex = $<HTMLInputElement>('ex-range');
   ex.value = String(state.exaggeration);
-  $('ex-out').textContent = `×${state.exaggeration.toFixed(1)}`;
+  $('ex-out').textContent = `×${num(state.exaggeration, 1)}`;
   $('contour-switch').setAttribute('aria-checked', String(state.contours));
   $<HTMLInputElement>('size-range').value = String(state.size);
-  $('size-out').textContent = formatArea(state.size);
+  $('size-out').textContent = area(state.size);
   for (const [id, value] of [['style-group', state.style]] as const) {
     for (const b of $(id).querySelectorAll<HTMLButtonElement>('[role="radio"]')) {
       const on = b.dataset.value === value;
@@ -671,7 +675,7 @@ function syncControls(): void {
 }
 
 function updateContourNote(): void {
-  if (model) $('contour-note').textContent = `every ${model.stats().contourInterval} m`;
+  if (model) $('contour-note').textContent = t.contourEvery(num(model.stats().contourInterval));
 }
 
 function updateCompass(): void {
@@ -712,7 +716,7 @@ function renderLegend(): void {
   for (const [h] of HEIGHT_RAMP) {
     const s = document.createElement('span');
     s.style.left = `${pos(h)}%`;
-    s.textContent = h === max ? `${h}+ m` : `${h}`;
+    s.textContent = h === max ? t.legendTop(num(h)) : num(h);
     labels.append(s);
   }
 }
@@ -721,26 +725,25 @@ function renderLegend(): void {
 function describe(): void {
   if (!model) return;
   const s = model.stats();
-  const nf = new Intl.NumberFormat();
   const relief = Math.round(s.maxElev - s.minElev);
   const lines = [
-    `${formatArea(state.size)} ${placeLabel.startsWith('Near ') ? `near ${placeLabel.slice(5)}` : `around ${placeLabel || 'this point'}`}.`,
-    `Ground from ${Math.round(s.minElev)} m to ${Math.round(s.maxElev)} m above sea level (${relief} m of relief).`,
+    placeNear ? t.nearPlace(area(state.size), placeNear) : t.aroundPlace(area(state.size), placeLabel || t.thisPoint),
+    t.ground(num(Math.round(s.minElev)), num(Math.round(s.maxElev)), num(relief)),
   ];
   if (model.hasBuildings) {
-    lines.push(s.buildings ? `${nf.format(s.buildings)} buildings; the tallest is about ${Math.round(s.tallest)} m.` : 'No buildings are mapped in this square.');
+    lines.push(s.buildings ? t.buildingCount(num(s.buildings), num(Math.round(s.tallest))) : t.noBuildingsSquare);
   }
   $('describe').textContent = lines.join(' ');
   const note = $('estimate-note');
   if (model.hasBuildings && s.estimatedShare >= 0.05) {
     note.hidden = false;
-    note.textContent = `Heights estimated for ${Math.round(s.estimatedShare * 100)}% of buildings — OpenStreetMap has no height or floor count for them.`;
+    note.textContent = t.estimated(num(Math.round(s.estimatedShare * 100)));
   } else {
     note.hidden = true;
   }
   $<HTMLCanvasElement>('scene').setAttribute(
     'aria-label',
-    `3D model. ${lines.join(' ')} Arrow keys orbit and tilt, Shift and arrow keys slide, plus and minus zoom, N faces north, 0 resets the view. Click a building to move the pin there.`,
+    t.sceneDescription(lines.join(' ')),
   );
 }
 
@@ -789,11 +792,11 @@ function bindShare(): void {
   let printMm = 150;
   let printTiles = 1;
   const updatePrintNote = () => {
-    const scale = `${printScale(state.size, printMm * printTiles)} · terrain ×${state.exaggeration.toFixed(1)}`;
-    const total = (printMm * printTiles) / 10;
-    $('print-label').textContent = printTiles > 1 ? 'Size of each tile' : '3D print size';
-    $('print-note').textContent = printTiles > 1 ? `${printTiles * printTiles} tiles, ${total} × ${total} cm in all · ${scale}` : scale;
-    $('stl-btn').textContent = printTiles > 1 ? 'Download 3D print tiles (ZIP of STL files)' : 'Download 3D print file (STL)';
+    const note = `${localScale(state.size, printMm * printTiles)} · ${t.terrainTimes(num(state.exaggeration, 1))}`;
+    const total = num((printMm * printTiles) / 10);
+    $('print-label').textContent = printTiles > 1 ? t.tileSize : t.printSize;
+    $('print-note').textContent = printTiles > 1 ? t.tilesNote(num(printTiles * printTiles), total, note) : note;
+    $('stl-btn').textContent = printTiles > 1 ? t.stlTilesButton : t.stlButton;
   };
   radioGroup('print-size-group', (v) => {
     printMm = Number(v);
@@ -821,9 +824,9 @@ function bindShare(): void {
     const roads: PrintRoad[] = $<HTMLInputElement>('print-roads').checked ? m.printRoads() : [];
     done.roads = roads.length > 0;
     const note = [
-      done.water ? ` Water sunk ${WATER_DEPTH_MM} mm.` : '',
-      done.green ? ` Parks and woods raised ${GREEN_RAISE_MM} mm.` : '',
-      done.roads ? ` Roads raised ${ROAD_RAISE_MM} mm.` : '',
+      done.water ? t.waterSunk(num(WATER_DEPTH_MM)) : '',
+      done.green ? t.greenRaised(num(GREEN_RAISE_MM, 1)) : '',
+      done.roads ? t.roadsRaised(num(ROAD_RAISE_MM, 1)) : '',
     ].join('');
     return { grid, roads, done, note };
   };
@@ -831,7 +834,7 @@ function bindShare(): void {
   tilesRange.max = String(MAX_TILES);
   tilesRange.addEventListener('input', () => {
     printTiles = Number(tilesRange.value);
-    $('tiles-out').textContent = printTiles > 1 ? `${printTiles} × ${printTiles} tiles` : 'One piece';
+    $('tiles-out').textContent = printTiles > 1 ? t.tilesOut(printTiles) : t.onePiece;
     updatePrintNote();
   });
 
@@ -857,16 +860,16 @@ function bindShare(): void {
   $('copy-btn').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(url.value);
-      msg.textContent = 'Link copied.';
+      msg.textContent = t.linkCopied;
     } catch {
       url.select();
-      msg.textContent = 'Select the link above and copy it.';
+      msg.textContent = t.selectLink;
     }
   });
 
   nativeBtn.addEventListener('click', async () => {
     try {
-      await navigator.share({ title: `${placeLabel || 'Your Place'} in 3D`, text: `${placeLabel || 'This place'} in 3D. Make one of your own place:`, url: url.value });
+      await navigator.share({ title: placeLabel ? t.shareInApp(placeLabel) : 'Your Place', text: t.shareText(placeLabel || t.thisPlace), url: url.value });
     } catch {
       /* dismissed */
     }
@@ -876,16 +879,16 @@ function bindShare(): void {
   posterBtn.addEventListener('click', async () => {
     if (!model || !state.center) return;
     posterBtn.disabled = true;
-    msg.textContent = 'Rendering poster…';
+    msg.textContent = t.renderingPoster;
     try {
       const blob = await makePoster(viewer, { title: title(), subtitle: subtitle(), center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
       saveBlob(blob, posterFileName(title(), state.size));
       msg.textContent = '';
       dialog.close();
-      toast('Poster saved');
+      toast(t.posterSaved);
     } catch (err) {
       console.error(err);
-      msg.textContent = 'Couldn’t render the poster on this device.';
+      msg.textContent = t.posterFailed;
     } finally {
       posterBtn.disabled = false;
     }
@@ -896,11 +899,11 @@ function bindShare(): void {
   stlBtn.addEventListener('click', async () => {
     if (!model || !state.center) return;
     if (debug.stage === 'loading' || debug.stage === 'terrain') {
-      msg.textContent = 'Still loading the buildings — try again in a moment.';
+      msg.textContent = t.stillLoading;
       return;
     }
     stlBtn.disabled = true;
-    msg.textContent = 'Building the 3D print file…';
+    msg.textContent = t.buildingPrint;
     await new Promise((r) => window.setTimeout(r, 30)); // let the message show
     try {
       const name = title();
@@ -916,15 +919,16 @@ function bindShare(): void {
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
       const stl = toBinaryStl(tris, `${name}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
       saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${printMm / 10}cm.stl`));
-      const mb = (stl.byteLength / 1048576).toFixed(stl.byteLength < 10485760 ? 1 : 0);
+      const mb = num(stl.byteLength / 1048576, stl.byteLength < 10485760 ? 1 : 0);
       const depth = label ? Math.round(label.depthMm) : 0;
-      const size = depth ? `${printMm / 10} × ${(printMm + depth) / 10} cm with the title strip` : `${printMm / 10} × ${printMm / 10} cm`;
-      const left = brokenBuildings ? ` ${brokenBuildings} building${brokenBuildings === 1 ? '' : 's'} with a broken outline in the map data left out.` : '';
-      const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-      msg.textContent = `Saved: ${size} at ${scale}, ${new Intl.NumberFormat().format(tris.count)} triangles (${mb} MB).${terrain.note}${left}${missing}`;
+      const cm = num(printMm / 10);
+      const size = depth ? t.printWithStrip(cm, num((printMm + depth) / 10, Number.isInteger((printMm + depth) / 10) ? 0 : 1)) : t.printSquare(cm);
+      const left = brokenBuildings ? t.brokenLeftOut(num(brokenBuildings), brokenBuildings) : '';
+      const missing = label?.missing.length ? t.fontMissing(label.missing.join(' '), label.missing.length) : '';
+      msg.textContent = `${t.saved(size, localScale(state.size, printMm), num(tris.count), mb)}${terrain.note}${left}${missing}`;
     } catch (err) {
       console.error(err);
-      msg.textContent = 'Couldn’t build the 3D print file on this device.';
+      msg.textContent = t.printFailed;
     } finally {
       stlBtn.disabled = false;
     }
@@ -953,25 +957,25 @@ function bindShare(): void {
     const last = tileName(n - 1, n - 1);
     const readme = [
       `Your Place: ${name}`,
-      `${formatArea(state.size)}, ${n * n} tiles (${n} x ${n}) of ${printMm / 10} cm, ${totalMm / 10} x ${totalMm / 10} cm in all, ${scale}, terrain x${state.exaggeration.toFixed(1)}.`,
+      t.readmeSize(area(state.size), num(n * n), n, num(printMm / 10), num(totalMm / 10), localScale(state.size, totalMm), num(state.exaggeration, 1)),
       '',
-      `Tiles are named by row and column like a map grid: row A is the north edge (the back), column 1 the west (left).`,
-      `A1 is the north-west corner, ${last} the south-east. Print each tile flat, base down, at 100%; they fit edge to edge.`,
-      label ? 'title.stl is the title strip: put it in front of the bottom row, in the middle.' : '',
-      terrain.done.water ? `Water (lakes, rivers mapped as areas, the sea) sits ${WATER_DEPTH_MM} mm below the land, with an edge to paint along.` : '',
-      terrain.done.green ? `Parks, gardens and woods stand ${GREEN_RAISE_MM} mm above the land.` : '',
-      terrain.done.roads ? `Roads, paths and railways stand ${ROAD_RAISE_MM} mm above the ground, with sharp edges.` : '',
+      t.readmeGrid,
+      t.readmeCorners(last),
+      label ? t.readmeStrip : '',
+      terrain.done.water ? t.readmeWater(num(WATER_DEPTH_MM)) : '',
+      terrain.done.green ? t.readmeGreen(num(GREEN_RAISE_MM, 1)) : '',
+      terrain.done.roads ? t.readmeRoads(num(ROAD_RAISE_MM, 1)) : '',
       '',
-      'Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen terrain tiles on AWS Open Data.',
+      t.readmeCredit,
     ].filter((l, i, a) => l || a[i - 1]).join('\n');
     files.push({ name: 'README.txt', data: new TextEncoder().encode(readme) });
     const zip = makeZip(files);
     saveBlob(new Blob([zip], { type: 'application/zip' }), exportFileName(name, state.size, `${n}x${n}-tiles-${printMm / 10}cm.zip`));
     const triangles = tiles.reduce((s, t) => s + t.tris.count, 0);
-    const mb = (zip.byteLength / 1048576).toFixed(zip.byteLength < 10485760 ? 1 : 0);
-    const left = broken ? ` A building with a broken outline in the map data was left out.` : '';
-    const missing = label?.missing.length ? ` The font has no ${label.missing.join(' ')}, so ${label.missing.length === 1 ? 'it was' : 'they were'} left off the title.` : '';
-    msg.textContent = `Saved: ${n * n} tiles of ${printMm / 10} cm, ${totalMm / 10} × ${totalMm / 10} cm in all${label ? ', and the title strip as its own piece' : ''}, at ${scale}, ${new Intl.NumberFormat().format(triangles)} triangles (${mb} MB).${terrain.note}${left}${missing}`;
+    const mb = num(zip.byteLength / 1048576, zip.byteLength < 10485760 ? 1 : 0);
+    const left = broken ? t.brokenInTile : '';
+    const missing = label?.missing.length ? t.fontMissing(label.missing.join(' '), label.missing.length) : '';
+    msg.textContent = `${t.savedTiles(num(n * n), num(printMm / 10), num(totalMm / 10), !!label, localScale(state.size, totalMm), num(triangles), mb)}${terrain.note}${left}${missing}`;
   }
 }
 

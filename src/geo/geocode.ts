@@ -6,6 +6,7 @@
  * Production should move this behind the app's own server (spec: privacy).
  */
 
+import { t } from '../i18n';
 import type { LngLat } from './projection';
 
 export type PlaceKind = 'city' | 'town' | 'village' | 'hamlet' | 'suburb' | 'postcode' | 'area' | 'street' | 'address' | 'poi';
@@ -22,19 +23,6 @@ export interface Place {
   /** the house number wasn't found, so this is its street */
   streetOnly?: boolean;
 }
-
-export const KIND_LABEL: Record<PlaceKind, string> = {
-  city: 'City',
-  town: 'Town',
-  village: 'Village',
-  hamlet: 'Hamlet',
-  suburb: 'District',
-  postcode: 'Postcode area',
-  area: 'Area',
-  street: 'Street',
-  address: 'Address',
-  poi: 'Place',
-};
 
 export const SETTLEMENT_KINDS = new Set<PlaceKind>(['city', 'town', 'village', 'hamlet', 'suburb']);
 
@@ -100,7 +88,7 @@ interface PhotonFeature {
 
 export function photonLabel(p: PhotonFeature['properties']): { label: string; detail: string } {
   const street = [p.street, p.housenumber].filter(Boolean).join(' ');
-  const label = p.name && p.name !== p.street ? p.name : street || p.name || p.city || p.state || 'Unnamed place';
+  const label = p.name && p.name !== p.street ? p.name : street || p.name || p.city || p.state || t.unnamedPlace;
   const cityPart = [p.postcode, p.city && p.city !== label ? p.city : ''].filter(Boolean).join(' ');
   const detailParts = [
     label !== street && street ? street : '',
@@ -245,7 +233,7 @@ export async function resolveToSettlement(p: Place, signal?: AbortSignal): Promi
     .filter((x) => x.d < 20000)
     .sort((a, b) => a.d - b.d)[0];
   if (!best) return null;
-  const context = p.kind === 'postcode' ? `Postcode ${p.label}` : p.label;
+  const context = p.kind === 'postcode' ? t.postcodeOf(p.label) : p.label;
   const region = best.h.detail.split(', ').slice(-1)[0];
   return { ...best.h, detail: [context, region].filter(Boolean).join(' · ') };
 }
@@ -316,7 +304,7 @@ export async function searchOnce(q: string, signal?: AbortSignal): Promise<Place
   const coords = parseCoordinates(q);
   if (coords) return { label: q.trim(), detail: '', center: coords };
   const linked = parseMapLink(q);
-  if (linked) return { label: formatLinkLabel(linked), detail: 'From a map link', center: linked };
+  if (linked) return { label: formatLinkLabel(linked), detail: t.fromMapLink, center: linked };
   for (const v of searchVariants(q)) {
     const hit = await nominatimSearch(v.q, signal);
     if (!hit) continue;

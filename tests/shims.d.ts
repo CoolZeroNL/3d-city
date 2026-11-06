@@ -12,3 +12,7 @@ declare module 'vt-pbf' {
 declare module 'node:zlib' {
   export function deflateSync(data: Uint8Array): Uint8Array;
 }
+// Node's fs, used to read the page's HTML.
+declare module 'node:fs' {
+  export function readFileSync(path: string, encoding: 'utf8'): string;
+}

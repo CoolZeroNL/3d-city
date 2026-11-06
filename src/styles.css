@@ -452,6 +452,31 @@ a {
   text-underline-offset: 3px;
 }
 
+.lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.lang select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.welcome .lang {
+  margin-top: 14px;
+}
+
+.about .lang {
+  margin-top: 4px;
+}
+
 .welcome-more a:hover {
   color: var(--text);
 }
@@ -665,6 +690,7 @@ a {
 
 .control-label small,
 .control-label output {
+  white-space: nowrap;
   font-weight: 450;
   color: var(--muted);
   font-size: 13px;

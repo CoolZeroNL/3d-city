@@ -21,6 +21,8 @@ works on your phone.**
   green or light blue, so they don't look like parks or water).
 - **Find a house:** slide the plate, tap a building to pin it, and “Centre here” to rebuild the square around it,
   or double-tap / double-click a spot to load the area there in one go.
+- **In your language:** English, Portuguese (Brazil) or German, from the browser's language or the picker in
+  the settings. Share links carry no language, so each visitor sees their own.
 - **Share it:** the link opens the same view with the same house pinned. It holds coordinates only, never the address you typed.
 - **Keep it:** download a poster image with the place name and coordinates, or an STL file to 3D print
   (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300), in one piece or in up to 8 × 8 tiles that fit your

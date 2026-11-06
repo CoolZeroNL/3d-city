@@ -5,7 +5,7 @@
  */
 
 import { formatLatLon, type LngLat } from '../geo/projection';
-import { formatArea } from '../state';
+import { area, num, t } from '../i18n';
 import type { Viewer } from '../scene/viewer';
 
 export interface PosterInfo {
@@ -17,7 +17,7 @@ export interface PosterInfo {
   exaggeration: number;
 }
 
-export const ATTRIBUTION_TEXT = '© OpenStreetMap contributors (ODbL) · © OpenMapTiles · OpenFreeMap · Terrain: Mapzen, AWS Terrain Tiles';
+export const ATTRIBUTION_TEXT = `© OpenStreetMap ${t.footerContributors} (ODbL) · © OpenMapTiles · OpenFreeMap · ${t.footerTerrain} Mapzen, AWS Terrain Tiles`;
 
 export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400): Promise<Blob> {
   const render = viewer.renderStill(width, width);
@@ -70,7 +70,7 @@ export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400)
 
   ctx.fillStyle = '#5c564d';
   ctx.font = `450 ${Math.round(W * 0.019)}px ${sans}`;
-  const meta = `${formatLatLon(info.center)}   ·   ${formatArea(info.sizeM)}   ·   terrain ×${info.exaggeration.toFixed(1)}`;
+  const meta = `${formatLatLon(info.center)}   ·   ${area(info.sizeM)}   ·   ${t.terrainTimes(num(info.exaggeration, 1))}`;
   ctx.fillText(meta, pad, y);
 
   ctx.fillStyle = '#8a8378';

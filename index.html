@@ -66,6 +66,7 @@
           role="img"
           aria-roledescription="3D model"
           aria-label="3D model of the selected area. Arrow keys orbit and tilt, plus and minus zoom, N faces north, 0 resets the view."
+          data-t-attr="aria-label:canvasLabel"
         ></canvas>
       </div>
 
@@ -83,17 +84,18 @@
             aria-autocomplete="list"
             aria-expanded="false"
             aria-controls="suggestions"
+            data-t-attr="placeholder:searchPlaceholder;aria-label:searchPlaceholder"
           />
-          <button type="button" class="icon-btn" id="locate-btn" aria-label="Use my location" title="Use my location">
+          <button type="button" class="icon-btn" id="locate-btn" aria-label="Use my location" title="Use my location" data-t-attr="aria-label:useLocation;title:useLocation">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="7.5" /><path d="M12 1.8v3M12 19.2v3M1.8 12h3M19.2 12h3" /></svg>
           </button>
-          <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions" hidden></ul>
+          <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions" data-t-attr="aria-label:suggestions" hidden></ul>
         </form>
         <div class="status" id="status" role="status" aria-live="polite" hidden></div>
         <div class="notice" id="notice" role="status" aria-live="polite" hidden>
           <p class="notice-text" id="notice-text"></p>
           <div class="notice-actions" id="notice-actions"></div>
-          <button type="button" class="icon-btn notice-close" id="notice-close" aria-label="Dismiss">
+          <button type="button" class="icon-btn notice-close" id="notice-close" aria-label="Dismiss" data-t-attr="aria-label:dismiss">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
         </div>
@@ -101,33 +103,34 @@
 
       <section class="welcome" id="welcome" aria-labelledby="welcome-title">
         <p class="eyebrow">Your Place</p>
-        <h1 id="welcome-title">The street you grew up on, in 3D</h1>
-        <p class="lede">Your first home, where you met, the town you left. Type the address and get it as a model on its real terrain, every building standing on top. Share it, hang it as a poster, or 3D print it.</p>
-        <p class="presets-label">Or explore a place with dramatic terrain</p>
+        <h1 id="welcome-title" data-t="welcomeTitle">The street you grew up on, in 3D</h1>
+        <p class="lede" data-t="welcomeLede">Your first home, where you met, the town you left. Type the address and get it as a model on its real terrain, every building standing on top. Share it, hang it as a poster, or 3D print it.</p>
+        <p class="presets-label" data-t="presetsLabel">Or explore a place with dramatic terrain</p>
         <div class="presets" id="presets"></div>
-        <p class="welcome-more"><a href="./about/">How it works, 3D printing tips and data sources</a></p>
+        <p class="welcome-more"><a href="./about/" data-t="aboutLink">How it works, 3D printing tips and data sources</a></p>
+        <label class="lang"><span data-t="language">Language</span> <select class="lang-select"></select></label>
       </section>
 
       <div class="fabs" id="fabs">
-        <button type="button" class="fab" id="compass-btn" aria-label="Face north" title="Face north (N)">
+        <button type="button" class="fab" id="compass-btn" aria-label="Face north" title="Face north (N)" data-t-attr="aria-label:faceNorth;title:faceNorthKey">
           <svg viewBox="0 0 24 24" aria-hidden="true" id="compass-needle"><path class="needle-n" d="M12 3.5 15 12H9z" /><path class="needle-s" d="M12 20.5 9 12h6z" /></svg>
         </button>
-        <button type="button" class="fab" id="reset-btn" aria-label="Reset view" title="Reset view (0)">
+        <button type="button" class="fab" id="reset-btn" aria-label="Reset view" title="Reset view (0)" data-t-attr="aria-label:resetView;title:resetViewKey">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5M4 15v5h5M20 9V4h-5" /></svg>
         </button>
-        <button type="button" class="fab" id="share-btn" aria-label="Share or export" title="Share or export">
+        <button type="button" class="fab" id="share-btn" aria-label="Share or export" title="Share or export" data-t-attr="aria-label:shareOrExport;title:shareOrExport">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" /><path d="M5 12v7.5h14V12" /></svg>
         </button>
       </div>
 
       <div class="mouse-hint" id="mouse-hint" hidden>
-        <span>Drag to turn · right-drag to slide · <strong>double-click to load the area there</strong></span>
-        <button type="button" class="icon-btn" id="mouse-hint-close" aria-label="Hide this hint">
+        <span><span data-t="mouseHint">Drag to turn · right-drag to slide · </span><strong data-t="mouseHintStrong">double-click to load the area there</strong></span>
+        <button type="button" class="icon-btn" id="mouse-hint-close" aria-label="Hide this hint" data-t-attr="aria-label:hideHint">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
         </button>
       </div>
 
-      <aside class="sheet" id="sheet" aria-label="Model settings">
+      <aside class="sheet" id="sheet" aria-label="Model settings" data-t-attr="aria-label:settings">
         <button type="button" class="sheet-head" id="sheet-toggle" aria-expanded="false" aria-controls="sheet-body">
           <span class="sheet-title">
             <span class="place-title" id="place-title">—</span>
@@ -138,7 +141,7 @@
         <div class="sheet-body" id="sheet-body">
           <div class="control">
             <div class="control-label">
-              <label for="ex-range">Terrain exaggeration</label>
+              <label for="ex-range" data-t="exaggeration">Terrain exaggeration</label>
               <output id="ex-out" for="ex-range">×1.5</output>
             </div>
             <input type="range" id="ex-range" min="1" max="5" step="0.1" value="1.5" />
@@ -146,7 +149,7 @@
 
           <div class="control control-row">
             <div class="control-label">
-              <span id="contour-label">Contour lines</span>
+              <span id="contour-label" data-t="contours">Contour lines</span>
               <small id="contour-note">every 10 m</small>
             </div>
             <button type="button" class="switch" id="contour-switch" role="switch" aria-checked="false" aria-labelledby="contour-label">
@@ -155,13 +158,13 @@
           </div>
 
           <div class="control">
-            <div class="control-label"><span id="style-label">Buildings</span></div>
+            <div class="control-label"><span id="style-label" data-t="buildings">Buildings</span></div>
             <div class="segmented swatches" role="radiogroup" aria-labelledby="style-label" id="style-group">
-              <button type="button" role="radio" data-value="white" aria-checked="true"><span class="style-swatch" aria-hidden="true"></span>White</button>
-              <button type="button" role="radio" data-value="grey" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>Grey</button>
-              <button type="button" role="radio" data-value="sand" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>Sand</button>
-              <button type="button" role="radio" data-value="dark" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>Dark</button>
-              <button type="button" role="radio" data-value="ramp" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>By height</button>
+              <button type="button" role="radio" data-value="white" aria-checked="true"><span class="style-swatch" aria-hidden="true"></span><span data-t="style.white">White</span></button>
+              <button type="button" role="radio" data-value="grey" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span><span data-t="style.grey">Grey</span></button>
+              <button type="button" role="radio" data-value="sand" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span><span data-t="style.sand">Sand</span></button>
+              <button type="button" role="radio" data-value="dark" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span><span data-t="style.dark">Dark</span></button>
+              <button type="button" role="radio" data-value="ramp" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span><span data-t="style.ramp">By height</span></button>
             </div>
             <div class="legend" id="legend" hidden>
               <div class="legend-bar" id="legend-bar"></div>
@@ -171,7 +174,7 @@
 
           <div class="control">
             <div class="control-label">
-              <label for="size-range">Area</label>
+              <label for="size-range" data-t="area">Area</label>
               <output id="size-out" for="size-range">2 × 2 km</output>
             </div>
             <input type="range" id="size-range" min="300" max="4000" step="100" value="2000" list="size-ticks" />
@@ -179,11 +182,11 @@
           </div>
 
           <div class="control">
-            <div class="control-label"><span id="layers-label">Map layers</span></div>
+            <div class="control-label"><span id="layers-label" data-t="mapLayers">Map layers</span></div>
             <div class="chips" role="group" aria-labelledby="layers-label" id="layers-group">
-              <button type="button" class="chip" data-layer="roads" aria-pressed="true"><i class="swatch swatch-roads"></i>Roads</button>
-              <button type="button" class="chip" data-layer="water" aria-pressed="true"><i class="swatch swatch-water"></i>Water</button>
-              <button type="button" class="chip" data-layer="green" aria-pressed="true"><i class="swatch swatch-green"></i>Green</button>
+              <button type="button" class="chip" data-layer="roads" aria-pressed="true"><i class="swatch swatch-roads"></i><span data-t="layer.roads">Roads</span></button>
+              <button type="button" class="chip" data-layer="water" aria-pressed="true"><i class="swatch swatch-water"></i><span data-t="layer.water">Water</span></button>
+              <button type="button" class="chip" data-layer="green" aria-pressed="true"><i class="swatch swatch-green"></i><span data-t="layer.green">Green</span></button>
             </div>
           </div>
 
@@ -191,46 +194,47 @@
             <p id="gesture-hint" class="gesture-hint"></p>
             <p id="describe" class="describe"></p>
             <p id="estimate-note" class="estimate-note" hidden></p>
-            <p class="attr">Map data © OpenStreetMap contributors (ODbL), map tiles © OpenMapTiles via OpenFreeMap. Terrain: Mapzen, AWS Terrain Tiles.</p>
+            <p class="attr" data-t="attribution">Map data © OpenStreetMap contributors (ODbL), map tiles © OpenMapTiles via OpenFreeMap. Terrain: Mapzen, AWS Terrain Tiles.</p>
+            <label class="lang"><span data-t="language">Language</span> <select class="lang-select"></select></label>
           </div>
         </div>
       </aside>
 
       <footer class="attribution">
-        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ·
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> <span data-t="footerContributors">contributors</span> ·
         <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> ·
         <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> ·
-        Terrain: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Mapzen, AWS Terrain Tiles</a>
+        <span data-t="footerTerrain">Terrain:</span> <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Mapzen, AWS Terrain Tiles</a>
       </footer>
 
       <dialog class="dialog" id="share-dialog" aria-labelledby="share-title">
         <form method="dialog" class="dialog-inner">
           <div class="dialog-head">
-            <h2 id="share-title">Share this model</h2>
-            <button class="icon-btn" value="close" aria-label="Close">
+            <h2 id="share-title" data-t="shareTitle">Share this model</h2>
+            <button class="icon-btn" value="close" aria-label="Close" data-t-attr="aria-label:close">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
-          <p class="dialog-note">The link holds the coordinates, your view and the pin, never the address you typed. With a pin, it shows exactly that building.</p>
+          <p class="dialog-note" data-t="shareNote">The link holds the coordinates, your view and the pin, never the address you typed. With a pin, it shows exactly that building.</p>
           <div class="link-row">
-            <input id="share-url" type="text" readonly aria-label="Share link" />
-            <button type="button" class="btn" id="copy-btn">Copy link</button>
+            <input id="share-url" type="text" readonly aria-label="Share link" data-t-attr="aria-label:shareLink" />
+            <button type="button" class="btn" id="copy-btn" data-t="copyLink">Copy link</button>
           </div>
-          <button type="button" class="btn btn-wide" id="native-share-btn" hidden>Share…</button>
+          <button type="button" class="btn btn-wide" id="native-share-btn" data-t="shareNative" hidden>Share…</button>
           <div class="title-fields">
             <div class="field">
-              <label for="print-title">Title on the poster and print</label>
+              <label for="print-title" data-t="titleField">Title on the poster and print</label>
               <input id="print-title" type="text" maxlength="48" autocomplete="off" enterkeyhint="done" />
             </div>
             <div class="field">
-              <label for="print-subtitle">Second line <small>optional</small></label>
-              <input id="print-subtitle" type="text" maxlength="48" autocomplete="off" enterkeyhint="done" placeholder="Where we met · June 2019" />
+              <label for="print-subtitle"><span data-t="secondLine">Second line</span> <small data-t="optional">optional</small></label>
+              <input id="print-subtitle" type="text" maxlength="48" autocomplete="off" enterkeyhint="done" placeholder="Where we met · June 2019" data-t-attr="placeholder:secondLineExample" />
             </div>
           </div>
-          <button type="button" class="btn btn-wide btn-primary" id="poster-btn">Download poster (PNG)</button>
+          <button type="button" class="btn btn-wide btn-primary" id="poster-btn" data-t="posterButton">Download poster (PNG)</button>
           <div class="print-block">
             <div class="control-label">
-              <span id="print-label">3D print size</span>
+              <span id="print-label" data-t="printSize">3D print size</span>
               <small id="print-note"></small>
             </div>
             <div class="segmented" role="radiogroup" aria-labelledby="print-label" id="print-size-group">
@@ -239,18 +243,18 @@
               <button type="button" role="radio" data-value="200" aria-checked="false" tabindex="-1">20 cm</button>
             </div>
             <div class="control-label tiles-label">
-              <label for="tiles-range">Split into tiles that fit your print bed</label>
-              <output id="tiles-out" for="tiles-range">One piece</output>
+              <label for="tiles-range" data-t="tilesLabel">Split into tiles that fit your print bed</label>
+              <output id="tiles-out" for="tiles-range" data-t="onePiece">One piece</output>
             </div>
             <input type="range" id="tiles-range" min="1" max="8" step="1" value="1" />
-            <label class="check"><input type="checkbox" id="print-ledge" checked /> Add the title in raised letters on a strip in front</label>
+            <label class="check"><input type="checkbox" id="print-ledge" checked /> <span data-t="titleStrip">Add the title in raised letters on a strip in front</span></label>
             <fieldset class="paint-set">
-              <legend>Edges to paint along</legend>
-              <label class="check"><input type="checkbox" id="print-water" checked /> Sink water 1 mm</label>
-              <label class="check"><input type="checkbox" id="print-roads" /> Raise roads 0.4 mm</label>
-              <label class="check"><input type="checkbox" id="print-green" /> Raise parks and woods 0.6 mm</label>
+              <legend data-t="paintEdges">Edges to paint along</legend>
+              <label class="check"><input type="checkbox" id="print-water" checked /> <span data-t="sinkWater">Sink water 1 mm</span></label>
+              <label class="check"><input type="checkbox" id="print-roads" /> <span data-t="raiseRoads">Raise roads 0.4 mm</span></label>
+              <label class="check"><input type="checkbox" id="print-green" /> <span data-t="raiseGreen">Raise parks and woods 0.6 mm</span></label>
             </fieldset>
-            <button type="button" class="btn btn-wide" id="stl-btn">Download 3D print file (STL)</button>
+            <button type="button" class="btn btn-wide" id="stl-btn" data-t="stlButton">Download 3D print file (STL)</button>
           </div>
           <p class="dialog-note" id="share-msg" role="status" aria-live="polite"></p>
         </form>
@@ -259,8 +263,8 @@
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
       <div class="unsupported" id="unsupported" hidden>
-        <h1>This browser can’t show the 3D model</h1>
-        <p>Your Place needs WebGL 2. Try a current version of Safari, Chrome, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
+        <h1 data-t="unsupportedTitle">This browser can’t show the 3D model</h1>
+        <p data-t="unsupportedText">Your Place needs WebGL 2. Try a current version of Safari, Chrome, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
       </div>
     </div>
     <noscript>

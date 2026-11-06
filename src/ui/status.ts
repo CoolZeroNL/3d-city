@@ -3,13 +3,15 @@
  * buildings, then roads/water/vegetation), announced politely to screen readers.
  */
 
+import { t } from '../i18n';
+
 export type StepId = 'terrain' | 'buildings' | 'layers';
 export type StepState = 'pending' | 'loading' | 'done' | 'error';
 
 const LABELS: Record<StepId, string> = {
-  terrain: 'Terrain',
-  buildings: 'Buildings',
-  layers: 'Roads & water',
+  terrain: t.stepTerrain,
+  buildings: t.stepBuildings,
+  layers: t.stepLayers,
 };
 
 export class StatusView {
@@ -78,15 +80,14 @@ export class StatusView {
       const s = document.createElement('span');
       s.className = 'step';
       s.dataset.state = this.states[id];
-      const suffix = this.states[id] === 'error' ? ' unavailable' : '';
-      s.textContent = LABELS[id] + suffix;
+      s.textContent = this.states[id] === 'error' ? t.stepFailed(LABELS[id]) : LABELS[id];
       this.el.append(s);
     }
     if (this.retry && Object.values(this.states).includes('error')) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'retry';
-      b.textContent = 'Retry';
+      b.textContent = t.retry;
       const fn = this.retry;
       b.addEventListener('click', () => fn());
       this.el.append(b);

@@ -727,6 +727,55 @@ try {
   expect(new URL(ap.url()).pathname === '/', '“Open the app” goes back to the app');
   await aboutCtx.close();
 
+  // ---------------- languages: Portuguese from the browser, German from the picker
+  const ptCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'pt-BR', reducedMotion: 'reduce' });
+  await routeAll(ptCtx);
+  const lp = await ptCtx.newPage();
+  watchConsole(lp, 'pt');
+  await lp.goto(`${base}#lat=48.7765&lon=9.1772&km=1.5&ex=1.5`);
+  const tPt = await waitStage(lp, ['ready', 'error']);
+  await settle(lp, 800);
+  const ptTexts = await lp.evaluate(() => ({
+    lang: document.documentElement.lang,
+    placeholder: document.getElementById('search-input').getAttribute('placeholder'),
+    area: document.querySelector('label[for="size-range"]').textContent,
+    size: document.getElementById('size-out').textContent,
+    describe: document.getElementById('describe').textContent,
+  }));
+  expect(
+    tPt.stage === 'ready' && ptTexts.lang === 'pt-BR' && ptTexts.placeholder === 'Busque um endereço ou lugar' && ptTexts.area === 'Área' && ptTexts.size === '1,5 × 1,5 km',
+    `a Portuguese browser gets the app in Portuguese (“${ptTexts.placeholder}”, “${ptTexts.size}”)`,
+  );
+  expect(/em volta de|perto de/.test(ptTexts.describe) && /prédios/.test(ptTexts.describe), `the description is in Portuguese too (“${ptTexts.describe.slice(0, 80)}…”)`);
+  // nothing marked for translation still shows its English text
+  const leftover = await lp.evaluate(async () => {
+    const html = await (await fetch('./')).text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const english = new Map([...doc.querySelectorAll('[data-t]')].map((el) => [el.dataset.t, el.textContent.trim()]));
+    return [...document.querySelectorAll('[data-t]')].filter((el) => el.textContent.trim() === english.get(el.dataset.t) && !/^(optional)$/.test(el.textContent.trim())).map((el) => el.dataset.t);
+  });
+  expect(leftover.length === 0, `no English left on the Portuguese page (${leftover.join(', ') || 'none'})`);
+  await shot(lp, '12-portuguese');
+  await lp.click('#share-btn');
+  await settle(lp, 300);
+  await shot(lp, '12a-portuguese-share');
+  await lp.keyboard.press('Escape');
+  // the picker switches to German and keeps the view
+  await lp.selectOption('.about .lang-select', 'de');
+  await lp.waitForLoadState('load');
+  await waitStage(lp, ['ready', 'error']);
+  const deTexts = await lp.evaluate(() => ({ lang: document.documentElement.lang, area: document.querySelector('label[for="size-range"]').textContent, hash: location.hash }));
+  expect(deTexts.lang === 'de-DE' && deTexts.area === 'Gebiet' && /km=1\.5/.test(deTexts.hash), `the language picker switches to German and keeps the place (“${deTexts.area}”)`);
+  await shot(lp, '12b-german');
+  await lp.click('#share-btn');
+  await settle(lp, 300);
+  await shot(lp, '12c-german-share');
+  await lp.keyboard.press('Escape');
+  await lp.goto(base);
+  await lp.waitForSelector('#welcome', { state: 'visible' });
+  await shot(lp, '12d-german-welcome');
+  await ptCtx.close();
+
   // ---------------- dark mode, reduced motion
   const dark = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark', reducedMotion: 'reduce' });
   await routeAll(dark);

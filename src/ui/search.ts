@@ -2,7 +2,8 @@
  * Address search: an ARIA combobox with debounced type-ahead suggestions.
  */
 
-import { KIND_LABEL, parseCoordinates, parseMapLink, searchOnce, suggest, suggestionFits, offerTyped, type Place } from '../geo/geocode';
+import { parseCoordinates, parseMapLink, searchOnce, suggest, suggestionFits, offerTyped, type Place } from '../geo/geocode';
+import { t } from '../i18n';
 import type { LngLat } from '../geo/projection';
 
 export interface SearchOptions {
@@ -70,8 +71,8 @@ export function setupSearch(o: SearchOptions): void {
       detail.className = 's-detail';
       const kind = document.createElement('span');
       kind.className = 's-kind';
-      kind.textContent = 'Exact address';
-      detail.append(kind, ' · search it as typed');
+      kind.textContent = t.exactAddress;
+      detail.append(kind, ` · ${t.searchAsTyped}`);
       li.append(label, detail);
       o.list.append(li);
     }
@@ -86,7 +87,7 @@ export function setupSearch(o: SearchOptions): void {
       if (p.kind && p.kind !== 'poi') {
         const kind = document.createElement('span');
         kind.className = 's-kind';
-        kind.textContent = KIND_LABEL[p.kind];
+        kind.textContent = t.kind[p.kind];
         detail.append(kind, p.detail ? ` · ${p.detail}` : '');
       } else {
         detail.textContent = p.detail;
@@ -119,25 +120,25 @@ export function setupSearch(o: SearchOptions): void {
     const closest = direct ? null : (items[0] ?? null);
     close();
     if (isLink(q) && !direct) {
-      return o.onError('This link doesn’t show its position. Open it, copy the coordinates and paste those instead.');
+      return o.onError(t.linkNoPosition);
     }
     try {
       const place = await searchOnce(q);
       if (place) {
         o.input.blur();
         o.onPick(place);
-        if (place.streetOnly) o.onNote('That house number isn’t in OpenStreetMap, so this opens on its street. Slide the model and tap your building to pin it.');
+        if (place.streetOnly) o.onNote(t.streetOnly);
         return;
       }
       if (closest) {
         choose(closest);
-        return o.onNote('That exact address isn’t in OpenStreetMap, so this is the closest match. Slide the model and tap your building to pin it.');
+        return o.onNote(t.closestMatch);
       }
-      o.onError(`Nothing found for “${q}”`);
+      o.onError(t.nothingFound(q));
     } catch (err) {
       console.warn(err);
       if (closest) return choose(closest);
-      o.onError('Search is unavailable right now. Check your connection and try again.');
+      o.onError(t.searchUnavailable);
     }
   };
 
@@ -151,13 +152,13 @@ export function setupSearch(o: SearchOptions): void {
         items = res;
         exact = offerTyped(q, res[0]) ? q : null;
         active = -1;
-        render(res.length || exact ? undefined : 'No matches — try a street and town');
+        render(res.length || exact ? undefined : t.noMatches);
       })
       .catch((err) => {
         if (signal.aborted) return;
         items = [];
         exact = null;
-        render('Suggestions unavailable — press Enter to search');
+        render(t.suggestionsUnavailable);
         console.warn(err);
       });
   };
