@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0 — unreleased
+
+- Buildings in more colours: white, grey, sand or dark, or coloured by height, picked from a row of swatches. Share links keep the choice. Suggested on Reddit: white buildings blended into the streets.
+- Height colours no longer use greens and blues, which looked like parks and water: they now run from yellow through orange and magenta to deep indigo. Suggested on Reddit.
+
 ## 1.4.0 — 2026-11-06
 
 - Raised roads in the 3D print: roads, paths and railways stand 0.4 mm above the ground with sharp edges, as their own pieces that follow the terrain, so they're easy to paint. At small scales only the roads wide enough to print are kept. Off by default; tick it in the share dialog. Suggested on Reddit.

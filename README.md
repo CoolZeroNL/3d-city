@@ -17,6 +17,8 @@ works on your phone.**
   Postcode and county results land on their village, not in a field.
 - **See it in 3D:** any square from 300 m to 4 km around it, in 100 m steps, with terrain you can exaggerate (1×–5×) and contour lines.
   Buildings stand at their mapped height; where none is mapped the app estimates it and says how many.
+  Show them in white, grey, sand or dark, or coloured by height (yellow through magenta to indigo, never
+  green or light blue, so they don't look like parks or water).
 - **Find a house:** slide the plate, tap a building to pin it, and “Centre here” to rebuild the square around it,
   or double-tap / double-click a spot to load the area there in one go.
 - **Share it:** the link opens the same view with the same house pinned. It holds coordinates only, never the address you typed.

@@ -5,7 +5,9 @@
 
 import { round, type LngLat } from './geo/projection';
 
-export type BuildingStyle = 'white' | 'ramp';
+/** Building colours: one colour for all, or coloured by height ('ramp'). */
+export const BUILDING_STYLES = ['white', 'grey', 'sand', 'dark', 'ramp'] as const;
+export type BuildingStyle = (typeof BUILDING_STYLES)[number];
 /** The side of the square (m): 300 m to 4 km in 100 m steps. */
 export type AreaSize = number;
 export const AREA_MIN = 300;
@@ -93,7 +95,8 @@ export function decodeState(raw: string, base: ViewState = DEFAULT_STATE): ViewS
   const ex = Number(p.get('ex'));
   if (p.has('ex') && Number.isFinite(ex)) s.exaggeration = Math.min(EXAGGERATION_MAX, Math.max(EXAGGERATION_MIN, ex));
   s.contours = p.get('ct') === '1';
-  s.style = p.get('st') === 'ramp' ? 'ramp' : 'white';
+  const st = p.get('st');
+  s.style = BUILDING_STYLES.find((x) => x === st) ?? 'white';
   const ly = p.get('ly');
   if (ly != null) s.layers = { roads: ly.includes('r'), water: ly.includes('w'), green: ly.includes('g') };
   const cam = p.get('cam')?.split(',').map(Number);

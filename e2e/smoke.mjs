@@ -282,6 +282,13 @@ try {
   await settle(page, 600);
   await shot(page, '03c-area-1500m');
   await setArea(2000);
+  // one colour for all buildings: no legend, and the choice is kept
+  for (const colour of ['grey', 'sand', 'dark']) {
+    await page.click(`#style-group [data-value="${colour}"]`);
+    await settle(page, 400);
+    await shot(page, `04a-buildings-${colour}`);
+  }
+  expect((await page.evaluate(() => window.__yourPlace.state().style)) === 'dark' && !(await page.isVisible('#legend')), 'buildings can be one colour (grey, sand, dark), without the height legend');
   await page.click('#style-group [data-value="ramp"]');
   expect(await page.isVisible('#legend'), 'height legend appears with height colours');
   await page.focus('#scene');

@@ -200,16 +200,26 @@ export function setBuildingsExaggeration(b: BuildingsBuild, ex: number, refElev:
 // ---------------------------------------------------------------- colour
 
 /** Height ramp (viridis stops: colour-blind safe, monotonic lightness). */
+/**
+ * Height colours: yellow through orange and magenta to deep indigo (matplotlib's plasma, from
+ * light to dark). No greens or light blues, so buildings never look like parks or water.
+ */
 export const HEIGHT_RAMP: Array<[number, string]> = [
-  [0, '#fde725'],
-  [10, '#7ad151'],
-  [20, '#22a884'],
-  [40, '#2a788e'],
-  [80, '#414487'],
-  [160, '#440154'],
+  [0, '#f0f921'],
+  [10, '#f89540'],
+  [20, '#cc4778'],
+  [40, '#9c179e'],
+  [80, '#5c01a6'],
+  [160, '#0d0887'],
 ];
 
-export const WHITE_BUILDING = '#f7f5f0';
+/** One colour for every building: white, and three that stand apart from roads, parks and water. */
+export const BUILDING_COLOURS = {
+  white: '#f7f5f0',
+  grey: '#a7a39b',
+  sand: '#d9bd8c',
+  dark: '#56524d',
+} as const;
 
 const rampColors = HEIGHT_RAMP.map(([h, c]) => [h, new Color(c)] as const);
 
@@ -225,17 +235,17 @@ export function rampColor(h: number, out = new Color()): Color {
   return out.copy(rampColors[rampColors.length - 1][1]);
 }
 
-export function applyBuildingStyle(b: BuildingsBuild, style: 'white' | 'ramp'): void {
+export function applyBuildingStyle(b: BuildingsBuild, style: keyof typeof BUILDING_COLOURS | 'ramp'): void {
   const col = b.geometry.getAttribute('color') as BufferAttribute;
   const arr = col.array as Float32Array;
   const c = new Color();
-  const white = new Color(WHITE_BUILDING);
+  const solid = style === 'ramp' ? null : new Color(BUILDING_COLOURS[style]);
   let lastH = -1;
   for (let v = 0; v < b.buildingHeight.length; v++) {
     const h = b.buildingHeight[v];
-    if (style === 'white') c.copy(white);
+    if (solid) c.copy(solid);
     else if (h !== lastH) rampColor(h, c);
-    lastH = style === 'white' ? -1 : h;
+    lastH = solid ? -1 : h;
     arr[v * 3] = c.r;
     arr[v * 3 + 1] = c.g;
     arr[v * 3 + 2] = c.b;

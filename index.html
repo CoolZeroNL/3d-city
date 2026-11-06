@@ -156,9 +156,12 @@
 
           <div class="control">
             <div class="control-label"><span id="style-label">Buildings</span></div>
-            <div class="segmented" role="radiogroup" aria-labelledby="style-label" id="style-group">
-              <button type="button" role="radio" data-value="white" aria-checked="true">White blocks</button>
-              <button type="button" role="radio" data-value="ramp" aria-checked="false">Height colours</button>
+            <div class="segmented swatches" role="radiogroup" aria-labelledby="style-label" id="style-group">
+              <button type="button" role="radio" data-value="white" aria-checked="true"><span class="style-swatch" aria-hidden="true"></span>White</button>
+              <button type="button" role="radio" data-value="grey" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>Grey</button>
+              <button type="button" role="radio" data-value="sand" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>Sand</button>
+              <button type="button" role="radio" data-value="dark" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>Dark</button>
+              <button type="button" role="radio" data-value="ramp" aria-checked="false" tabindex="-1"><span class="style-swatch" aria-hidden="true"></span>By height</button>
             </div>
             <div class="legend" id="legend" hidden>
               <div class="legend-bar" id="legend-bar"></div>

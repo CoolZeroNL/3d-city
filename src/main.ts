@@ -5,7 +5,7 @@ import { DATA_ZOOM, fetchTiles, parseTiles, settlementsFromTiles, tilesForSquare
 import { formatLatLon, makeProjector, squareBBox, type LngLat } from './geo/projection';
 import { loadHeightGrid } from './geo/terrain';
 import { CityModel } from './scene/cityModel';
-import { HEIGHT_RAMP } from './scene/buildingsMesh';
+import { BUILDING_COLOURS, HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
 import { clampSize, decodeState, encodeState, formatArea, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
@@ -701,7 +701,13 @@ function renderPresets(): void {
 function renderLegend(): void {
   const max = HEIGHT_RAMP[HEIGHT_RAMP.length - 1][0];
   const pos = (h: number) => (Math.sqrt(h) / Math.sqrt(max)) * 100;
-  $('legend-bar').style.background = `linear-gradient(to right, ${HEIGHT_RAMP.map(([h, c]) => `${c} ${pos(h).toFixed(1)}%`).join(', ')})`;
+  const ramp = (dir: string) => `linear-gradient(${dir}, ${HEIGHT_RAMP.map(([h, c]) => `${c} ${pos(h).toFixed(1)}%`).join(', ')})`;
+  $('legend-bar').style.background = ramp('to right');
+  // the building colour swatches, from the same colours the buildings get
+  for (const b of $('style-group').querySelectorAll<HTMLButtonElement>('[role="radio"]')) {
+    const v = b.dataset.value as keyof typeof BUILDING_COLOURS | 'ramp';
+    b.querySelector<HTMLElement>('.style-swatch')!.style.background = v === 'ramp' ? ramp('135deg') : BUILDING_COLOURS[v];
+  }
   const labels = $('legend-labels');
   for (const [h] of HEIGHT_RAMP) {
     const s = document.createElement('span');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Color, Vector3 } from 'three';
-import { applyBuildingStyle, buildBuildings, buildingOfVertex, buildingsAt, paintBuildings, rampColor, setBuildingsExaggeration } from '../src/scene/buildingsMesh';
+import { Color, SRGBColorSpace, Vector3 } from 'three';
+import { applyBuildingStyle, BUILDING_COLOURS, buildBuildings, buildingOfVertex, buildingsAt, paintBuildings, rampColor, setBuildingsExaggeration } from '../src/scene/buildingsMesh';
 import { withOrientation, type Polygon } from '../src/geo/polygon';
 import { decodeState, DEFAULT_STATE, encodeState, formatArea, type ViewState } from '../src/state';
 
@@ -80,6 +80,30 @@ describe('building extrusion', () => {
     expect(col.getX(0)).toBeGreaterThan(0.9);
   });
 
+  it('paints every building in one colour on the solid styles', () => {
+    const col = b.geometry.getAttribute('color');
+    for (const style of ['grey', 'sand', 'dark'] as const) {
+      applyBuildingStyle(b, style);
+      const c = new Color(BUILDING_COLOURS[style]);
+      for (const v of [0, b.starts[1], b.starts[3] - 1]) {
+        expect(col.getX(v)).toBeCloseTo(c.r, 5);
+        expect(col.getZ(v)).toBeCloseTo(c.b, 5);
+      }
+    }
+    applyBuildingStyle(b, 'white');
+  });
+
+  it('keeps height colours clear of park greens and water blues', () => {
+    // no height gets a green hue, or a light blue like the water
+    const hsl = { h: 0, s: 0, l: 0 };
+    for (let h = 0; h <= 200; h += 1) {
+      rampColor(h).getHSL(hsl, SRGBColorSpace);
+      const deg = hsl.h * 360;
+      expect(deg > 75 && deg < 165, `green at ${h} m (${deg.toFixed(0)}°)`).toBe(false);
+      expect(deg >= 165 && deg < 225 && hsl.l > 0.45, `light blue at ${h} m (${deg.toFixed(0)}°)`).toBe(false);
+    }
+  });
+
   it('keeps each building in one vertex range, so a hit face names its building', () => {
     expect(b.starts[0]).toBe(0);
     expect(b.starts[1]).toBe(20);
@@ -123,6 +147,16 @@ describe('view state URL', () => {
     };
     const back = decodeState(`#${encodeState(s)}`);
     expect(back).toEqual(s);
+  });
+
+  it('carries the building colour, and falls back to white for an unknown one', () => {
+    const base = { ...DEFAULT_STATE, center: { lat: 1, lon: 2 } };
+    for (const style of ['grey', 'sand', 'dark', 'ramp'] as const) {
+      expect(encodeState({ ...base, style })).toContain(`st=${style}`);
+      expect(decodeState(`#${encodeState({ ...base, style })}`).style).toBe(style);
+    }
+    expect(encodeState({ ...base, style: 'white' })).not.toContain('st=');
+    expect(decodeState('#lat=1&lon=2&st=purple').style).toBe('white');
   });
 
   it('carries a moved pin, and drops a broken or inherited one', () => {
