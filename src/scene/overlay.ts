@@ -18,7 +18,8 @@ export const PALETTE = {
   plaza: '#f5f2eb',
   water: '#a9c5d6',
   roadFill: '#fbfaf6',
-  roadCasing: '#d6cfc1',
+  // a clear edge: white roads on the beige ground were hard to see from a distance
+  roadCasing: '#998c76',
   path: '#f6f2ea',
   rail: '#8e877b',
 };
@@ -148,7 +149,7 @@ export class Overlay {
       for (const l of roads) if (l.kind === 'path') strokeLine(ctx, l, Math.max(l.widthM, minW));
       // casings first, then fills, so junctions merge cleanly
       const vehicular = roads.filter((l) => l.kind !== 'path');
-      const casing = Math.max(1.6, 1.2 / s);
+      const casing = Math.max(4, 3 / s);
       ctx.strokeStyle = PALETTE.roadCasing;
       for (const l of vehicular) strokeLine(ctx, l, Math.max(l.widthM, minW) + casing);
       ctx.strokeStyle = PALETTE.roadFill;
