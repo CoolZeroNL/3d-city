@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.5.0 — unreleased
+## 1.5.0 — 2026-11-06
 
 - Buildings in more colours: white, grey, sand or dark, or coloured by height, picked from a row of swatches. Share links keep the choice. Suggested on Reddit: white buildings blended into the streets.
 - Height colours no longer use greens and blues, which looked like parks and water: they now run from yellow through orange and magenta to deep indigo. Suggested on Reddit.
