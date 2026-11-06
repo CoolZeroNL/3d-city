@@ -929,6 +929,7 @@ function bindShare(): void {
       `Tiles are named by row and column like a map grid: row A is the north edge (the back), column 1 the west (left).`,
       `A1 is the north-west corner, ${last} the south-east. Print each tile flat, base down, at 100%; they fit edge to edge.`,
       label ? 'title.stl is the title ledge: put it in front of the bottom row, in the middle.' : '',
+      terrain.sunk ? `Water (lakes, rivers mapped as areas, the sea) sits ${WATER_DEPTH_MM} mm below the land, with an edge to paint along.` : '',
       '',
       'Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen terrain tiles on AWS Open Data.',
     ].filter((l, i, a) => l || a[i - 1]).join('\n');

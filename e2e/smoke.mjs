@@ -436,7 +436,7 @@ try {
     tileSizes.every((b) => b.whole && b.count > 5000 && Math.abs(b.size[0] - 100) < 0.01 && Math.abs(b.size[1] - 100) < 0.01 && Math.abs(b.lo[2] + 3) < 1e-4),
     `each tile is 100 × 100 mm on the same 3 mm base (${tileSizes.map((b) => b.size.map((v) => v.toFixed(1)).join('×')).join(', ')})`,
   );
-  expect(/A1 is the north-west corner/.test(files['README.txt'].toString()), 'the note in the ZIP explains how the tiles go together');
+  expect(/A1 is the north-west corner/.test(files['README.txt'].toString()) && /sits 1 mm below the land/.test(files['README.txt'].toString()), 'the note in the ZIP explains how the tiles go together and that the water is sunk');
   expect(/^Saved: 4 tiles of 10 cm, 20 × 20 cm in all, and the title ledge as its own piece, at 1:10,000/.test(await page.textContent('#share-msg')), 'the dialog confirms the tiles');
   // the largest split, in the browser: 64 tiles in one ZIP
   await setTiles(8);

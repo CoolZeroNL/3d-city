@@ -21,7 +21,8 @@ works on your phone.**
   or double-tap / double-click a spot to load the area there in one go.
 - **Share it:** the link opens the same view with the same house pinned. It holds coordinates only, never the address you typed.
 - **Keep it:** download a poster image with the place name and coordinates, or an STL file to 3D print
-  (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300). Every exported shell is checked to be watertight.
+  (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300), in one piece or in up to 8 × 8 tiles that fit your
+  print bed. Water sits 1 mm below the land, easy to paint. Every exported shell is checked to be watertight.
 
 ## Controls
 
