@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.0 — unreleased
+## 1.4.0 — 2026-11-06
 
 - Raised roads in the 3D print: roads, paths and railways stand 0.4 mm above the ground with sharp edges, as their own pieces that follow the terrain, so they're easy to paint. At small scales only the roads wide enough to print are kept. Off by default; tick it in the share dialog. Suggested on Reddit.
 - Raised parks and woods: parks, gardens, pitches and woods stand 0.6 mm above the land (water inside them stays sunk). Off by default. Suggested on Reddit.
