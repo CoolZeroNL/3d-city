@@ -1,5 +1,5 @@
 /**
- * The app's language: English, Portuguese (Brazil) or German. It follows the browser unless the
+ * The app's language: English, Spanish, Portuguese (Brazil) or German. It follows the browser unless the
  * visitor picked one, which is remembered on this device. Share links carry no language, so a
  * link opens in each visitor's own.
  *
@@ -10,17 +10,20 @@
 
 import { de } from './de';
 import { en, type Messages } from './en';
+import { es } from './es';
 import { pt } from './pt';
 
-export type Lang = 'en' | 'pt' | 'de';
+export type Lang = 'en' | 'es' | 'pt' | 'de';
 
 export const LANGS: ReadonlyArray<{ code: Lang; name: string; locale: string }> = [
   { code: 'en', name: 'English', locale: 'en-GB' },
+  // Latin American Spanish, with Mexico's numbers (1.5, 13,300)
+  { code: 'es', name: 'Español', locale: 'es-MX' },
   { code: 'pt', name: 'Português', locale: 'pt-BR' },
   { code: 'de', name: 'Deutsch', locale: 'de-DE' },
 ];
 
-export const MESSAGES: Record<Lang, Messages> = { en, pt, de };
+export const MESSAGES: Record<Lang, Messages> = { en, es, pt, de };
 
 const KEY = 'yp:lang';
 

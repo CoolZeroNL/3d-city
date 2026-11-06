@@ -775,6 +775,25 @@ try {
   await lp.waitForSelector('#welcome', { state: 'visible' });
   await shot(lp, '12d-german-welcome');
   await ptCtx.close();
+  // and Spanish, with Mexico's numbers
+  const esCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'es-MX', reducedMotion: 'reduce' });
+  await routeAll(esCtx);
+  const ep = await esCtx.newPage();
+  watchConsole(ep, 'es');
+  await ep.goto(`${base}#lat=48.7765&lon=9.1772&km=1.5&ex=1.5`);
+  await waitStage(ep, ['ready', 'error']);
+  const esTexts = await ep.evaluate(() => ({
+    lang: document.documentElement.lang,
+    placeholder: document.getElementById('search-input').getAttribute('placeholder'),
+    size: document.getElementById('size-out').textContent,
+    picker: document.querySelector('.about .lang-select').value,
+  }));
+  expect(
+    esTexts.lang === 'es-MX' && esTexts.placeholder === 'Busca una dirección o un lugar' && esTexts.size === '1.5 × 1.5 km' && esTexts.picker === 'es',
+    `a Spanish browser gets the app in Spanish (“${esTexts.placeholder}”, “${esTexts.size}”)`,
+  );
+  await shot(ep, '12e-spanish');
+  await esCtx.close();
 
   // ---------------- dark mode, reduced motion
   const dark = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: 'dark', reducedMotion: 'reduce' });

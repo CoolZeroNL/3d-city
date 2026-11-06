@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 — unreleased
+
+- Your Place in Spanish, for Latin America and Spain, with Mexico's way of writing numbers (1.5 × 1.5 km). It follows the browser's language, or pick Español in the settings.
+
 ## 1.6.1 — 2026-11-06
 
 - Clearer streets: roads have a darker, wider edge, so white roads no longer fade into the beige ground. On screen and on the poster; the 3D print is unchanged. Suggested on Reddit.

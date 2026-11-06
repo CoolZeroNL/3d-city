@@ -22,6 +22,7 @@ function texts(m: Messages): Map<string, string> {
 
 /** Texts that are rightly the same as in English (names, units, words the languages share). */
 const SAME: Record<string, string[]> = {
+  es: ['legendTop', 'legendTop#1', 'printSquare', 'printSquare#1'],
   pt: ['legendTop', 'legendTop#1', 'printSquare', 'printSquare#1'],
   de: ['legendTop', 'legendTop#1', 'printSquare', 'printSquare#1', 'docTitle', 'docTitle#1', 'shareInApp', 'shareInApp#1', 'optional', 'style.sand'],
 };
@@ -31,12 +32,13 @@ describe('languages', () => {
     expect(pickLang('de', ['pt-BR'])).toBe('de');
     expect(pickLang(null, ['pt-BR', 'en'])).toBe('pt');
     expect(pickLang(null, ['fr-FR', 'de-AT'])).toBe('de');
-    expect(pickLang(null, ['fr-FR', 'es'])).toBe('en');
+    expect(pickLang(null, ['es-MX', 'en'])).toBe('es');
+    expect(pickLang(null, ['fr-FR', 'it'])).toBe('en');
     expect(pickLang('xx', ['en-US'])).toBe('en');
   });
 
-  for (const code of ['pt', 'de'] as const) {
-    it(`has every text in ${code === 'pt' ? 'Portuguese' : 'German'}, and none left in English`, () => {
+  for (const code of ['es', 'pt', 'de'] as const) {
+    it(`has every text in ${{ es: 'Spanish', pt: 'Portuguese', de: 'German' }[code]}, and none left in English`, () => {
       const base = texts(en);
       const other = texts(MESSAGES[code]);
       expect([...other.keys()].sort()).toEqual([...base.keys()].sort());
