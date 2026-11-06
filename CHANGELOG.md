@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.0 — unreleased
+## 1.6.0 — 2026-11-06
 
 - Your Place in Portuguese (Brazil) and German, as well as English. It follows the browser's language, or pick one under the settings or on the start page; the choice is remembered on that device. Numbers follow the language too (1,5 × 1,5 km, 1:13.300). Share links carry no language, so each visitor sees the app in their own. The "How it works" page stays in English for now.
 
