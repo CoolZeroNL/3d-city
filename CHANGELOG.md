@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.1 — unreleased
+## 1.6.1 — 2026-11-06
 
 - Clearer streets: roads have a darker, wider edge, so white roads no longer fade into the beige ground. On screen and on the poster; the 3D print is unchanged. Suggested on Reddit.
 
