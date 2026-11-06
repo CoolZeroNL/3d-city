@@ -288,7 +288,11 @@ try {
   for (let k = 0; k < 7; k++) await page.keyboard.press('ArrowDown');
   for (let k = 0; k < 3; k++) await page.keyboard.press('ArrowRight');
   await page.keyboard.press('+');
-  await settle(page, 1500);
+  // headless software GL can pause drawing for a second or two here; as for the compass below,
+  // wait for the movement's last frame rather than a fixed delay (moving() is still false right
+  // after the key press, before the first frame)
+  await page.waitForFunction(() => (window.__yourPlace.camera()?.tilt ?? 0) > 40 && !window.__yourPlace.moving(), null, { timeout: 15000 }).catch(() => undefined);
+  await settle(page, 500);
   const cam = await page.evaluate(() => window.__yourPlace.camera());
   await shot(page, '04-height-colours-tilted');
   await page.click('[data-layer="roads"]');
