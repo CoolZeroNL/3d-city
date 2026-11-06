@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.7.0 — unreleased
+## 1.7.0 — 2026-11-06
 
 - Your Place in Spanish, for Latin America and Spain, with Mexico's way of writing numbers (1.5 × 1.5 km). It follows the browser's language, or pick Español in the settings.
 

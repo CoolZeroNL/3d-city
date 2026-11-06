@@ -1,7 +1,7 @@
 {
   "name": "your-place",
   "private": true,
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "Your Place — turn any address into a 3D miniature of the surrounding city on real terrain.",
   "homepage": "https://yourplace3d.github.io/3d-city/",
   "repository": {
