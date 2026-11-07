@@ -638,6 +638,94 @@ try {
   const t3b = await waitStage(p3, ['ready'], 180000);
   expect(t3b.stage === 'ready', 'Retry recovers once Overpass answers');
   await p3.close();
+  // ---------------- a bigger map: neighbouring squares print as pieces that meet at the seam
+  const bm = await desktop.newPage();
+  watchConsole(bm, 'bigger map');
+  await bm.goto(`${base}#lat=48.77650&lon=9.17720&km=1&ex=1.5`);
+  await waitStage(bm, ['ready', 'error']);
+  await bm.click('#share-btn');
+  await bm.click('#print-size-group [data-value="100"]');
+  await bm.click('#series-start');
+  await bm.waitForFunction(() => /ser=/.test(location.hash) && window.__yourPlace.stage === 'ready', null, { timeout: 120000 }).catch(() => undefined);
+  const ser0 = await bm.evaluate(() => ({ s: window.__yourPlace.state().series, min: window.__yourPlace.stats()?.minElev }));
+  expect(
+    ser0.s && ser0.s.i === 0 && ser0.s.j === 0 && ser0.s.mm === 100 && ser0.s.ref <= ser0.min - 20 && ser0.s.ref % 10 === 0,
+    `starting a bigger map fixes the print size and a base below the ground around (base ${ser0.s?.ref} m, lowest here ${ser0.min?.toFixed?.(0)} m)`,
+  );
+  expect(await bm.isDisabled('#ex-range'), 'the terrain exaggeration is fixed for the bigger map');
+  const printSquare = async (file) => {
+    if (!(await bm.isVisible('#share-dialog'))) await bm.click('#share-btn');
+    const [dl] = await Promise.all([bm.waitForEvent('download', { timeout: 120000 }), bm.click('#stl-btn')]);
+    const path = join(out, file);
+    await dl.saveAs(path);
+    return { name: dl.suggestedFilename(), data: readFileSync(path) };
+  };
+  /** Highest point of the terrain block along one edge (x in mm), by position along it. */
+  const edge = (data, x) => {
+    const top = new Map();
+    const count = data.readUInt32LE(80);
+    for (let k = 0; k < count; k++)
+      for (let q = 0; q < 3; q++) {
+        const o = 84 + k * 50 + 12 + q * 12;
+        if (Math.abs(data.readFloatLE(o) - x) > 0.001) continue;
+        const y = data.readFloatLE(o + 4).toFixed(2);
+        top.set(y, Math.max(top.get(y) ?? -Infinity, data.readFloatLE(o + 8)));
+      }
+    return top;
+  };
+  const sqA = await printSquare('12a-square-E0-N0.stl');
+  expect((await bm.isDisabled('#print-ledge')) && !(await bm.isChecked('#print-ledge')), 'a square of a bigger map has no title strip');
+  await bm.click('#series-e');
+  await bm.waitForFunction(() => window.__yourPlace.state().series?.i === 1 && window.__yourPlace.stage === 'ready', null, { timeout: 120000 }).catch(() => undefined);
+  expect(/square E1 N0/.test(await bm.textContent('#place-meta')), `the next square says where it is (“${await bm.textContent('#place-meta')}”)`);
+  const sqB = await printSquare('12b-square-E1-N0.stl');
+  expect(/-E0-N0-10cm\.stl$/.test(sqA.name) && /-E1-N0-10cm\.stl$/.test(sqB.name), `the files say where each square goes (${sqA.name}, ${sqB.name})`);
+  const east = edge(sqA.data, 50);
+  const west = edge(sqB.data, -50);
+  const shared = [...east.keys()].filter((y) => west.has(y));
+  const worst = Math.max(...shared.map((y) => Math.abs(east.get(y) - west.get(y))));
+  expect(shared.length > 200 && worst < 0.02, `the two squares meet at the seam: ${shared.length} points along it, at most ${worst.toFixed(4)} mm apart`);
+  // the link reopens the same square of the same map
+  const serHash = await bm.evaluate(() => location.hash);
+  const serCenter = await bm.evaluate(() => window.__yourPlace.state().center);
+  const bm2 = await desktop.newPage();
+  watchConsole(bm2, 'bigger map link');
+  await bm2.goto(base + serHash);
+  await waitStage(bm2, ['ready', 'error']);
+  const back = await bm2.evaluate(() => window.__yourPlace.state());
+  expect(back.series?.i === 1 && back.series?.ref === ser0.s.ref && Math.abs(back.center.lat - serCenter.lat) < 1e-9 && Math.abs(back.center.lon - serCenter.lon) < 1e-9, 'the link reopens the same square of the same bigger map');
+  await bm2.close();
+  // the whole map at once: 2 × 2 squares, built one after another into one ZIP
+  if (!(await bm.isVisible('#share-dialog'))) await bm.click('#share-btn');
+  await bm.click('#series-block [data-value="2"]');
+  const [mapDl] = await Promise.all([bm.waitForEvent('download', { timeout: 300000 }), bm.click('#series-all-btn')]);
+  const mapPath = join(out, '12c-map-2x2.zip');
+  await mapDl.saveAs(mapPath);
+  const mapZip = readFileSync(mapPath);
+  const mapFiles = mapZip.readUInt16LE(mapZip.length - 22 + 10);
+  const mapText = mapZip.toString('latin1');
+  expect(
+    /-map-2x2-10cm\.zip$/.test(mapDl.suggestedFilename()) && mapFiles === 5 && ['E1-N0', 'E2-N0', 'E1-N1', 'E2-N1'].every((l) => mapText.includes(`square-${l}.stl`)) && mapText.includes('E1 N1 | E2 N1'),
+    `“Download the whole map” saves 2 × 2 squares and a layout note in one ZIP (${mapDl.suggestedFilename()}, ${mapFiles} files, ${(mapZip.length / 1048576).toFixed(1)} MB)`,
+  );
+  // the same in colour, with level roads painted: a 3MF per square
+  if (!(await bm.isVisible('#share-dialog'))) await bm.click('#share-btn');
+  await bm.check('#print-colour');
+  await bm.click('#print-roads-group [data-value="level"]');
+  const [colourMapDl] = await Promise.all([bm.waitForEvent('download', { timeout: 300000 }), bm.click('#series-all-btn')]);
+  const colourMapPath = join(out, '12d-map-2x2-colour.zip');
+  await colourMapDl.saveAs(colourMapPath);
+  const colourMap = readFileSync(colourMapPath).toString('latin1');
+  expect(
+    ['E1-N0', 'E2-N0', 'E1-N1', 'E2-N1'].every((l) => colourMap.includes(`square-${l}.3mf`)) && /painted for multi-colour printing/.test(colourMap) && /level with the ground, painted/.test(colourMap),
+    `the whole map in colour is a 3MF per square, with level roads painted (${(colourMap.length / 1048576).toFixed(1)} MB)`,
+  );
+  await bm.uncheck('#print-colour');
+  if (!(await bm.isVisible('#share-dialog'))) await bm.click('#share-btn');
+  await bm.click('#series-stop');
+  expect(!(await bm.evaluate(() => window.__yourPlace.state().series)) && !(await bm.isDisabled('#ex-range')) && !(await bm.isDisabled('#print-ledge')), 'leaving the bigger map frees the settings again');
+  await bm.close();
+
   await desktop.close();
 
   // ---------------- villages: postcode search and empty squares

@@ -185,11 +185,14 @@ export class CityModel {
     return (this.features?.lines ?? []).filter((l) => !WATER_LINES.has(l.kind)).map((l) => ({ pts: l.pts, widthM: l.widthM, bridge: l.bridge }));
   }
 
-  /** Buildings for the 3D print: footprints and roof heights as shown (m above the lowest point). */
-  printBuildings(): PrintBuilding[] {
+  /**
+   * Buildings for the 3D print: footprints and roof heights as shown, in metres above the lowest
+   * point, or above `ref` (m above sea level) for a square of a bigger map.
+   */
+  printBuildings(ref = this.grid.min): PrintBuilding[] {
     const b = this.buildings?.build;
     if (!b) return [];
-    return this.specs.map((spec, i) => ({ poly: spec.poly, top: (b.buildingGround[i] - this.grid.min) * this.exaggeration + spec.height }));
+    return this.specs.map((spec, i) => ({ poly: spec.poly, top: (Math.max(b.buildingGround[i], ref) - ref) * this.exaggeration + spec.height }));
   }
 
   /** What a ray from the camera hits: a building (pin goes inside it) or open ground. */

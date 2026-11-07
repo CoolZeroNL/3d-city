@@ -219,8 +219,9 @@ async function fetchTile(z: number, x: number, y: number, signal?: AbortSignal):
 }
 
 /** Fetch the tiles covering the square and resample them into an n×n grid. */
-export async function loadHeightGrid(center: LngLat, sizeM: number, n: number, signal?: AbortSignal): Promise<HeightGrid> {
-  const z = chooseZoom(center.lat, sizeM, n);
+/** `zoom` overrides the elevation tiles' zoom, so the squares of a bigger map are sampled alike. */
+export async function loadHeightGrid(center: LngLat, sizeM: number, n: number, signal?: AbortSignal, zoom?: number): Promise<HeightGrid> {
+  const z = zoom ?? chooseZoom(center.lat, sizeM, n);
   const proj = makeProjector(center);
   // one pixel of margin so bilinear sampling at the edge has neighbours
   const margin = metresPerPixel(center.lat, z) * 2;

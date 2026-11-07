@@ -30,6 +30,10 @@ works on your phone.**
   and roads can stand 0.4 mm above it or be cut 0.6 mm into it. Every exported shell is checked to be
   watertight. For multi-material printers, save it in colour instead: a 3MF already painted with four
   filaments (1 ground, 2 buildings and title, 3 roads, 4 water), with level roads painted flush.
+- **Go bigger, square by square:** "Make a bigger map from several squares" fixes the area, print
+  size and terrain, and an arrow pad loads the square next door. Every square's print measures from
+  one shared base, so the pieces meet exactly at the edges; "Download the whole map" saves 2 × 2 or
+  3 × 3 squares in one ZIP, as STL or in colour.
 
 ## Controls
 
@@ -205,7 +209,7 @@ slicers read them, closed by vertex index, which parts get which filament).
 (`e2e/fixtures/synthetic-city.mjs`), uses real terrain tiles, and drives search, every control,
 keyboard camera, pinning a building (click, drag, share-link round-trip, "Centre here"),
 Shift-arrow and two-finger sliding, share link round-trip, poster download, STL download (size and
-base checked; raised and sunken roads closed), the colour 3MF (painted, closed), an Overpass outage with retry, a phone
+base checked; raised and sunken roads closed), the colour 3MF (painted, closed), a bigger map (two neighbouring squares meet at the seam, the link reopens the square, the whole map as STL and in colour), an Overpass outage with retry, a phone
 viewport, and dark mode with reduced motion. It fails on any console error.
 
 ## Licence

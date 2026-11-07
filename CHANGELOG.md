@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.5 — 2026-11-09
+
+- A bigger map, square by square: "Make a bigger map from several squares" in the share menu fixes the area, the print size and the terrain, and an arrow pad loads the square next door; the link remembers the map and the square. Every square's print measures its heights from one shared base, so neighbouring pieces meet exactly at the edges (ground that dips below that base is flattened onto it, and the dialog says so). "Download the whole map" saves 2 × 2 or 3 × 3 squares in one ZIP with a note on how they fit, as STL or in colour. Asked for on Reddit.
+
 ## 1.7.4 — 2026-11-09
 
 - Roads in colour without raising or sinking them: with "In colour" ticked and Roads on "Level", the roads are painted flush with the ground in filament 3, and bridges stand raised. Until now level roads weren't in the print at all, so they got no colour.

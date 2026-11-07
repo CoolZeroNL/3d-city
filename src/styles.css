@@ -1031,6 +1031,89 @@ input[type='range'] {
   width: 100%;
 }
 
+/* a bigger map: squares side by side that print as pieces of one map */
+.series {
+  margin: 14px 0 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-sunk);
+}
+
+.series-intro {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.series-where {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.series-where small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.series-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  gap: 6px;
+  justify-content: center;
+}
+
+.series-go {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-solid);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.series-go:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.series-here {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.series-all {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.series-all p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.series-stop {
+  display: block;
+  margin: 10px auto 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .title-fields {
   display: grid;
   gap: 8px;
