@@ -388,6 +388,24 @@ try {
       }
     return { dl, data, count, lo, hi, size: [0, 1, 2].map((a) => hi[a] - lo[a]) };
   };
+  /** Edges not used exactly once each way: 0 for a print of closed shells. */
+  const openEdges = ({ data, count }) => {
+    const seen = new Map();
+    const at = (k, v) => [0, 1, 2].map((q) => data.readFloatLE(84 + k * 50 + 12 + v * 12 + q * 4)).join(',');
+    for (let k = 0; k < count; k++) {
+      const v = [at(k, 0), at(k, 1), at(k, 2)];
+      for (let e = 0; e < 3; e++) {
+        const d = `${v[e]}>${v[(e + 1) % 3]}`;
+        seen.set(d, (seen.get(d) ?? 0) + 1);
+      }
+    }
+    let open = 0;
+    for (const [d, n] of seen) {
+      const [a, b] = d.split('>');
+      if (n !== 1 || seen.get(`${b}>${a}`) !== 1) open++;
+    }
+    return open;
+  };
   expect((await page.inputValue('#print-title')).length > 0, 'the title field starts with the place name');
   const plain = await printFile('06b-model.stl');
   expect(plain.data.length === 84 + 50 * plain.count && plain.count > 50000, `STL downloaded (${plain.dl.suggestedFilename()}, ${plain.count} triangles, ${(plain.data.length / 1048576).toFixed(1)} MB)`);
@@ -410,7 +428,7 @@ try {
   await page.check('#print-water');
   expect(Math.abs(bare.size[0] - 100) < 0.01 && Math.abs(bare.size[1] - 100) < 0.01, `without the title the print is the plain square (${bare.size.map((v) => v.toFixed(2)).join(' × ')} mm)`);
   // raised roads and parks: their own pieces on the terrain, and the dialog says so
-  await page.check('#print-roads');
+  await page.click('#print-roads-group [data-value="raised"]');
   await page.check('#print-green');
   const painted = await printFile('06h-roads-green.stl');
   const paintedMsg = await page.textContent('#share-msg');
@@ -419,7 +437,16 @@ try {
     `raised roads add ${painted.count - bare.count} triangles and stay inside the square (${painted.size.map((v) => v.toFixed(2)).join(' × ')} mm)`,
   );
   expect(/Parks and woods raised 0\.6 mm\./.test(paintedMsg), 'the park and the forest in the test city are raised');
-  await page.uncheck('#print-roads');
+  // sunken roads: cut into the ground instead, still one closed print inside the square
+  await page.click('#print-roads-group [data-value="sunk"]');
+  const sunk = await printFile('06i-roads-sunk.stl');
+  const sunkMsg = await page.textContent('#share-msg');
+  expect(
+    /Roads sunk 0\.6 mm\./.test(sunkMsg) && sunk.count > bare.count + 1000 && Math.abs(sunk.size[0] - 100) < 0.01 && Math.abs(sunk.size[1] - 100) < 0.01 && Math.abs(sunk.lo[2] + 3) < 1e-4,
+    `sunken roads add ${sunk.count - bare.count} triangles and keep the square and its base (${sunk.size.map((v) => v.toFixed(2)).join(' × ')} mm, “${sunkMsg.trim()}”)`,
+  );
+  expect(openEdges(sunk) === 0, `the print with sunken roads is closed (${openEdges(sunk)} open edges)`);
+  await page.click('#print-roads-group [data-value="level"]');
   await page.uncheck('#print-green');
   await page.check('#print-ledge');
   // tiles: 2 × 2 pieces of 10 cm in a ZIP, with the title ledge as its own piece

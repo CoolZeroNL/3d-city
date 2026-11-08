@@ -1212,6 +1212,18 @@ input[type='range'] {
   min-width: 0;
 }
 
+.paint-roads {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.paint-roads .segmented button {
+  padding: 6px 4px;
+  font-size: 13px;
+}
+
 .paint-set legend {
   padding: 0;
   margin-bottom: 8px;

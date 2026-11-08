@@ -26,8 +26,9 @@ works on your phone.**
 - **Share it:** the link opens the same view with the same house pinned. It holds coordinates only, never the address you typed.
 - **Keep it:** download a poster image with the place name and coordinates, or an STL file to 3D print
   (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300), in one piece or in up to 8 × 8 tiles that fit your
-  print bed. For painting, water sits 1 mm below the land, and roads (0.4 mm) and parks and woods (0.6 mm)
-  can stand above it. Every exported shell is checked to be watertight.
+  print bed. For painting, water sits 1 mm below the land, parks and woods (0.6 mm) can stand above it,
+  and roads can stand 0.4 mm above it or be cut 0.6 mm into it. Every exported shell is checked to be
+  watertight.
 
 ## Controls
 
@@ -120,6 +121,14 @@ Design notes:
   buried in the block. Corners up to 90° are mitred, sharper ones get an octagon, and pieces overlap
   slightly instead of sharing faces. Roads thinner than 0.3 mm at true scale are left out, the rest
   are at least 0.5 mm wide, and bridges keep a level deck between their ends.
+- **Sunken roads are cut into the terrain block itself.** Slicers only add shells, so a groove can't
+  be a piece of its own. Where the roads are comes from a field of "distance to the nearest road
+  edge" sampled about every 0.2 mm of the print; its zero line, traced cell by cell (marching
+  squares), is the road edge, so overlapping roads merge and ends come out round without any
+  polygon union. Each crossing of that edge with a grid line is computed once and shared by both
+  cells, so the block stays one closed shell: cells the edge crosses are split into land and road
+  faces (earcut), 0.6 mm apart, with vertical walls between; the rest keep the terrain's two
+  triangles. Bridges stay raised. About 0.3–0.5 s for a dense 2 km square.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
 ## Technical choices

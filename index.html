@@ -251,7 +251,14 @@
             <fieldset class="paint-set">
               <legend data-t="paintEdges">Edges to paint along</legend>
               <label class="check"><input type="checkbox" id="print-water" checked /> <span data-t="sinkWater">Sink water 1 mm</span></label>
-              <label class="check"><input type="checkbox" id="print-roads" /> <span data-t="raiseRoads">Raise roads 0.4 mm</span></label>
+              <div class="paint-roads">
+                <span id="print-roads-label" data-t="roadsLabel">Roads</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="print-roads-label" id="print-roads-group">
+                  <button type="button" role="radio" data-value="level" aria-checked="true" data-t="roadsLevel">Level</button>
+                  <button type="button" role="radio" data-value="raised" aria-checked="false" tabindex="-1" data-t="roadsRaise">Raised 0.4 mm</button>
+                  <button type="button" role="radio" data-value="sunk" aria-checked="false" tabindex="-1" data-t="roadsSink">Sunk 0.6 mm</button>
+                </div>
+              </div>
               <label class="check"><input type="checkbox" id="print-green" /> <span data-t="raiseGreen">Raise parks and woods 0.6 mm</span></label>
             </fieldset>
             <button type="button" class="btn btn-wide" id="stl-btn" data-t="stlButton">Download 3D print file (STL)</button>

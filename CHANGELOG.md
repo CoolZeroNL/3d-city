@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.1 — 2026-11-08
+
+- Sunken roads for 3D prints: roads, paths and railways can be cut 0.6 mm into the ground instead of standing 0.4 mm above it, with sharp edges to paint along or fill. Bridges stay raised. Suggested on Reddit.
+- The poster's small line (coordinates, area, terrain) can be replaced with your own text or left empty, like the title.
+
 ## 1.7.0 — 2026-11-06
 
 - Your Place in Spanish, for Latin America and Spain, with Mexico's way of writing numbers (1.5 × 1.5 km). It follows the browser's language, or pick Español in the settings.

@@ -13,6 +13,7 @@ import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
 import { depthInMetres, GREEN_RAISE_MM, shiftMasked, sinkWater, WATER_DEPTH_MM } from './export/water';
 import { ROAD_RAISE_MM, type PrintRoad } from './export/roads';
+import { ROAD_SINK_MM } from './export/sunkenRoads';
 import { addLabel, loadGlyphs } from './export/label';
 import { exportFileName, makePoster, posterFileName } from './ui/poster';
 import { setupSearch } from './ui/search';
@@ -798,13 +799,18 @@ function bindShare(): void {
     $('print-note').textContent = printTiles > 1 ? t.tilesNote(num(printTiles * printTiles), total, note) : note;
     $('stl-btn').textContent = printTiles > 1 ? t.stlTilesButton : t.stlButton;
   };
+  // roads in the print: level with the ground, raised, or cut into it
+  let roadsMode = 'level';
+  radioGroup('print-roads-group', (v) => {
+    roadsMode = v;
+  });
   radioGroup('print-size-group', (v) => {
     printMm = Number(v);
     updatePrintNote();
   });
   /**
-   * The print's terrain and roads, as ticked: water sunk, parks and woods raised (where the square
-   * has them), raised roads. `done` lists what was changed, for the message and the tiles' note.
+   * The print's terrain and roads, as chosen: water sunk, parks and woods raised (where the square
+   * has them), roads raised or sunk. `done` lists what was changed, for the message and the tiles' note.
    */
   const printLayers = (totalMm: number) => {
     const m = model!;
@@ -821,14 +827,17 @@ function bindShare(): void {
       grid = shiftMasked(grid, green, metres(GREEN_RAISE_MM));
       done.green = true;
     }
-    const roads: PrintRoad[] = $<HTMLInputElement>('print-roads').checked ? m.printRoads() : [];
+    const roads: PrintRoad[] = roadsMode !== 'level' ? m.printRoads() : [];
     done.roads = roads.length > 0;
-    const note = [
-      done.water ? t.waterSunk(num(WATER_DEPTH_MM)) : '',
-      done.green ? t.greenRaised(num(GREEN_RAISE_MM, 1)) : '',
-      done.roads ? t.roadsRaised(num(ROAD_RAISE_MM, 1)) : '',
-    ].join('');
-    return { grid, roads, done, note };
+    const sinkRoadsMm = done.roads && roadsMode === 'sunk' ? ROAD_SINK_MM : undefined;
+    /** The note once the print is built: sunk roads that had to be raised after all say so. */
+    const note = (raisedInstead: boolean) =>
+      [
+        done.water ? t.waterSunk(num(WATER_DEPTH_MM)) : '',
+        done.green ? t.greenRaised(num(GREEN_RAISE_MM, 1)) : '',
+        !done.roads ? '' : raisedInstead ? t.roadsRaisedInstead(num(ROAD_RAISE_MM, 1)) : sinkRoadsMm ? t.roadsSunk(num(ROAD_SINK_MM, 1)) : t.roadsRaised(num(ROAD_RAISE_MM, 1)),
+      ].join('');
+    return { grid, roads, done, sinkRoadsMm, note };
   };
   const tilesRange = $<HTMLInputElement>('tiles-range');
   tilesRange.max = String(MAX_TILES);
@@ -913,7 +922,7 @@ function bindShare(): void {
       }
       const scale = printScale(state.size, printMm);
       const terrain = printLayers(printMm);
-      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration }, terrain.roads);
+      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm }, terrain.roads);
       const brokenBuildings = tris.skipped;
       // the title in raised letters on a strip in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
@@ -925,7 +934,7 @@ function bindShare(): void {
       const size = depth ? t.printWithStrip(cm, num((printMm + depth) / 10, Number.isInteger((printMm + depth) / 10) ? 0 : 1)) : t.printSquare(cm);
       const left = brokenBuildings ? t.brokenLeftOut(num(brokenBuildings), brokenBuildings) : '';
       const missing = label?.missing.length ? t.fontMissing(label.missing.join(' '), label.missing.length) : '';
-      msg.textContent = `${t.saved(size, localScale(state.size, printMm), num(tris.count), mb)}${terrain.note}${left}${missing}`;
+      msg.textContent = `${t.saved(size, localScale(state.size, printMm), num(tris.count), mb)}${terrain.note(tris.roadsRaisedInstead)}${left}${missing}`;
     } catch (err) {
       console.error(err);
       msg.textContent = t.printFailed;
@@ -941,7 +950,8 @@ function bindShare(): void {
     const totalMm = printMm * n;
     const scale = printScale(state.size, totalMm);
     const terrain = printLayers(totalMm);
-    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, tiles: n }, terrain.roads);
+    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, tiles: n }, terrain.roads);
+    const raisedInstead = tiles.some((tile) => tile.tris.roadsRaisedInstead);
     const files: ZipEntry[] = tiles.map((t) => ({
       name: `tile-${t.name}.stl`,
       data: new Uint8Array(toBinaryStl(t.tris, `${name}, tile ${t.name} of ${n}x${n}, ${scale}`)),
@@ -964,7 +974,7 @@ function bindShare(): void {
       label ? t.readmeStrip : '',
       terrain.done.water ? t.readmeWater(num(WATER_DEPTH_MM)) : '',
       terrain.done.green ? t.readmeGreen(num(GREEN_RAISE_MM, 1)) : '',
-      terrain.done.roads ? t.readmeRoads(num(ROAD_RAISE_MM, 1)) : '',
+      !terrain.done.roads ? '' : terrain.sinkRoadsMm && !raisedInstead ? t.readmeRoadsSunk(num(ROAD_SINK_MM, 1)) : t.readmeRoads(num(ROAD_RAISE_MM, 1)),
       '',
       t.readmeCredit,
     ].filter((l, i, a) => l || a[i - 1]).join('\n');
@@ -975,7 +985,7 @@ function bindShare(): void {
     const mb = num(zip.byteLength / 1048576, zip.byteLength < 10485760 ? 1 : 0);
     const left = broken ? t.brokenInTile : '';
     const missing = label?.missing.length ? t.fontMissing(label.missing.join(' '), label.missing.length) : '';
-    msg.textContent = `${t.savedTiles(num(n * n), num(printMm / 10), num(totalMm / 10), !!label, localScale(state.size, totalMm), num(triangles), mb)}${terrain.note}${left}${missing}`;
+    msg.textContent = `${t.savedTiles(num(n * n), num(printMm / 10), num(totalMm / 10), !!label, localScale(state.size, totalMm), num(triangles), mb)}${terrain.note(raisedInstead)}${left}${missing}`;
   }
 }
 

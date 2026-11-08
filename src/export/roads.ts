@@ -31,7 +31,7 @@ export interface PrintRoad {
 type V = [number, number, number];
 
 /** How deep the pieces reach into the terrain block (mm). */
-const BURY_MM = 0.6;
+export const BURY_MM = 0.6;
 /** How far neighbouring pieces overlap (mm), so they never share a face. */
 const OVERLAP_MM = 0.05;
 /** The most the ground may bend under one piece before it is cut (mm). */
@@ -125,6 +125,8 @@ export interface RoadOptions {
   exaggeration: number;
   /** how far roads stand up (mm) */
   raiseMm?: number;
+  /** how deep the pieces reach under the ground (mm); deeper where the ground has roads cut into it */
+  buryMm?: number;
 }
 
 /**
@@ -156,7 +158,7 @@ export function addRoads(t: Triangles, grid: HeightGrid, roads: PrintRoad[], opt
     // vary the inset and depth a little per road, so duplicate roads don't make identical shells
     const shrink = (0.01 / s) * (1 + 0.4 * (ri % 5));
     const w = hw - shrink;
-    const bury = BURY_MM + 0.003 * (ri % 97);
+    const bury = (opts.buryMm ?? BURY_MM) + 0.003 * (ri % 97);
 
     // a bridge keeps a straight deck between its ends, over whatever is under it
     const deckFrom = ground(pts[0]);

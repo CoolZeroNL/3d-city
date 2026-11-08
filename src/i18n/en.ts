@@ -175,7 +175,10 @@ export const en = {
   titleStrip: 'Add the title in raised letters on a strip in front',
   paintEdges: 'Edges to paint along',
   sinkWater: 'Sink water 1 mm',
-  raiseRoads: 'Raise roads 0.4 mm',
+  roadsLabel: 'Roads',
+  roadsLevel: 'Level',
+  roadsRaise: 'Raised 0.4 mm',
+  roadsSink: 'Sunk 0.6 mm',
   raiseGreen: 'Raise parks and woods 0.6 mm',
   stlButton: 'Download 3D print file (STL)',
   stlTilesButton: 'Download 3D print tiles (ZIP of STL files)',
@@ -190,6 +193,8 @@ export const en = {
   waterSunk: (mm: string) => ` Water sunk ${mm} mm.`,
   greenRaised: (mm: string) => ` Parks and woods raised ${mm} mm.`,
   roadsRaised: (mm: string) => ` Roads raised ${mm} mm.`,
+  roadsSunk: (mm: string) => ` Roads sunk ${mm} mm.`,
+  roadsRaisedInstead: (mm: string) => ` The roads couldn’t be cut in here, so they’re raised ${mm} mm instead.`,
   brokenLeftOut: (n: string, count: number) => ` ${n} building${count === 1 ? '' : 's'} with a broken outline in the map data left out.`,
   brokenInTile: ' A building with a broken outline in the map data was left out.',
   fontMissing: (chars: string, count: number) => ` The font has no ${chars}, so ${count === 1 ? 'it was' : 'they were'} left off the title.`,
@@ -203,6 +208,7 @@ export const en = {
   readmeWater: (mm: string) => `Water (lakes, rivers mapped as areas, the sea) sits ${mm} mm below the land, with an edge to paint along.`,
   readmeGreen: (mm: string) => `Parks, gardens and woods stand ${mm} mm above the land.`,
   readmeRoads: (mm: string) => `Roads, paths and railways stand ${mm} mm above the ground, with sharp edges.`,
+  readmeRoadsSunk: (mm: string) => `Roads, paths and railways are cut ${mm} mm into the ground, with sharp edges; bridges stay raised.`,
   readmeCredit: 'Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen terrain tiles on AWS Open Data.',
 };
 

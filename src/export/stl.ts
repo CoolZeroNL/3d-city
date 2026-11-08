@@ -5,7 +5,8 @@
  *  - the terrain block: the height grid as the top, four side walls down to a
  *    flat base, and a bottom — one watertight shell;
  *  - one prism per building, from inside the block up to its roof;
- *  - optionally raised roads: short pieces whose tops follow the terrain (roads.ts).
+ *  - optionally raised roads: short pieces whose tops follow the terrain (roads.ts);
+ *    or sunken roads, cut into the block's top instead (sunkenRoads.ts), with bridges raised.
  * A building column that starts below the terrain surface is buried in the
  * block, so the union is exactly "building above ground" — no gaps on slopes.
  * Every shell is closed with outward-facing triangles, so slicers (PrusaSlicer,
@@ -16,7 +17,8 @@ import earcut, { deviation } from 'earcut';
 import polygonClipping from 'polygon-clipping';
 import { signedArea, type Polygon } from '../geo/polygon';
 import type { HeightGrid } from '../geo/terrain';
-import { addRoads, type PrintRoad } from './roads';
+import { addRoads, BURY_MM, type PrintRoad } from './roads';
+import { addCarvedTerrainBlock } from './sunkenRoads';
 
 /** A building for print: footprint (m from the centre) and roof height (m above the lowest terrain point, exaggeration applied). */
 export interface PrintBuilding {
@@ -38,6 +40,8 @@ export interface PrintOptions {
    * slicers close gaps that small, so the print is unchanged.
    */
   shellGapMm?: number;
+  /** Cut the roads this deep into the ground (mm) instead of raising them. */
+  sinkRoadsMm?: number;
 }
 
 export const PRINT_SHELL_GAP_MM = 0.01;
@@ -53,6 +57,8 @@ export class Triangles {
   count = 0;
   /** buildings left out because their outline could not be made valid */
   skipped = 0;
+  /** the roads were to be sunk but couldn't be cut in, so they were raised instead */
+  roadsRaisedInstead = false;
 
   /** Add a triangle, flipped if needed so its normal points along `out`. */
   add(a: V, b: V, c: V, out: V): void {
@@ -67,6 +73,11 @@ export class Triangles {
     const nz = ux * vy - uy * vx;
     if (nx * nx + ny * ny + nz * nz < 1e-18) return; // zero area
     if (nx * out[0] + ny * out[1] + nz * out[2] < 0) [b, c] = [c, b];
+    this.push(a, b, c);
+  }
+
+  /** Add a triangle exactly as given (anticlockwise seen from outside), even a sliver of no area. */
+  push(a: V, b: V, c: V): void {
     if ((this.count + 1) * 9 > this.data.length) {
       const grown = new Float32Array(this.data.length * 2);
       grown.set(this.data);
@@ -82,12 +93,24 @@ export class Triangles {
 const UP: V = [0, 0, 1];
 const DOWN: V = [0, 0, -1];
 
-/** Build the print as triangles (mm), with raised roads if any are given. */
+/** Build the print as triangles (mm), with raised (or, with `sinkRoadsMm`, sunken) roads if any are given. */
 export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: PrintOptions, roads: PrintRoad[] = []): Triangles {
   const t = new Triangles();
   const s = opts.sideMm / grid.sizeM; // mm per metre
   const base = -opts.baseMm;
-  addTerrainBlock(t, grid, opts.exaggeration, s, base);
+  let sink = roads.length && opts.sinkRoadsMm ? opts.sinkRoadsMm : 0;
+  if (sink) {
+    try {
+      addCarvedTerrainBlock(t, grid, roads, { s, exaggeration: opts.exaggeration, base, depthMm: sink });
+    } catch (err) {
+      // never seen, but a print with raised roads beats no print
+      console.warn('sunken roads failed, raising them instead', err);
+      t.count = 0;
+      t.roadsRaisedInstead = true;
+      sink = 0;
+    }
+  }
+  if (!sink) addTerrainBlock(t, grid, opts.exaggeration, s, base);
   // building columns start halfway into the base: always inside the block
   const bottom = base / 2;
   const gap = opts.shellGapMm ?? PRINT_SHELL_GAP_MM;
@@ -96,7 +119,11 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
     // their outlines are identical (an outline and its building part)
     addPrism(t, b.poly, b.top * s, bottom - gap * 0.3 * (i % 97), s, gap * (1 + 0.4 * (i % 5)));
   });
-  if (roads.length) addRoads(t, grid, roads, { s, exaggeration: opts.exaggeration });
+  if (sink) {
+    // bridges stay raised: over water and valleys there is nothing to cut them into
+    const bridges = roads.filter((r) => r.bridge);
+    if (bridges.length) addRoads(t, grid, bridges, { s, exaggeration: opts.exaggeration, buryMm: sink + BURY_MM });
+  } else if (roads.length) addRoads(t, grid, roads, { s, exaggeration: opts.exaggeration });
   return t;
 }
 
