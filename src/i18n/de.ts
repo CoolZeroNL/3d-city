@@ -152,6 +152,7 @@ export const de: Messages = {
   shareText: (place) => `${place} in 3D. Mach eins von deinem eigenen Ort:`,
   thisPlace: 'Dieser Ort',
   titleField: 'Titel auf Poster und Druck',
+  metaField: 'Kleine Zeile auf dem Poster',
   secondLine: 'Zweite Zeile',
   optional: 'optional',
   secondLineExample: 'Wo wir uns kennengelernt haben · Juni 2019',

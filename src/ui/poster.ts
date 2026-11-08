@@ -15,6 +15,13 @@ export interface PosterInfo {
   center: LngLat;
   sizeM: number;
   exaggeration: number;
+  /** the small line under the title; coordinates, area and terrain unless replaced, none if empty */
+  meta?: string;
+}
+
+/** The poster's small line by default: "48.77650° N, 9.17720° E · 2 × 2 km · terrain ×1.5". */
+export function posterMeta(center: LngLat, sizeM: number, exaggeration: number): string {
+  return `${formatLatLon(center)}   ·   ${area(sizeM)}   ·   ${t.terrainTimes(num(exaggeration, 1))}`;
 }
 
 export const ATTRIBUTION_TEXT = `© OpenStreetMap ${t.footerContributors} (ODbL) · © OpenMapTiles · OpenFreeMap · ${t.footerTerrain} Mapzen, AWS Terrain Tiles`;
@@ -68,10 +75,17 @@ export async function makePoster(viewer: Viewer, info: PosterInfo, width = 2400)
     y += subSize * 1.3;
   }
 
-  ctx.fillStyle = '#5c564d';
-  ctx.font = `450 ${Math.round(W * 0.019)}px ${sans}`;
-  const meta = `${formatLatLon(info.center)}   ·   ${area(info.sizeM)}   ·   ${t.terrainTimes(num(info.exaggeration, 1))}`;
-  ctx.fillText(meta, pad, y);
+  const meta = (info.meta ?? posterMeta(info.center, info.sizeM, info.exaggeration)).trim();
+  if (meta) {
+    let metaSize = Math.round(W * 0.019);
+    ctx.fillStyle = '#5c564d';
+    ctx.font = `450 ${metaSize}px ${sans}`;
+    while (ctx.measureText(meta).width > W - 2 * pad && metaSize > 12) {
+      metaSize -= 2;
+      ctx.font = `450 ${metaSize}px ${sans}`;
+    }
+    ctx.fillText(meta, pad, y);
+  }
 
   ctx.fillStyle = '#8a8378';
   ctx.font = `400 ${Math.round(W * 0.0125)}px ${sans}`;

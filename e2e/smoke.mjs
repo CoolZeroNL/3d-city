@@ -354,6 +354,19 @@ try {
   const posterSize = statSync(posterPath).size;
   expect(posterSize > 200000, `poster PNG downloaded (${download.suggestedFilename()}, ${Math.round(posterSize / 1024)} KB)`);
 
+  // the poster's small line: the coordinates by default, replaceable
+  await page.click('#share-btn');
+  await page.waitForSelector('#share-dialog[open]');
+  expect(/° N, .*° E/.test(await page.inputValue('#print-meta')), 'the poster line shows the coordinates by default');
+  await page.fill('#print-meta', 'Which city?');
+  const [ownLinePoster] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#poster-btn')]);
+  expect(statSync(await ownLinePoster.path()).size > 200000, 'a poster with its own small line downloads');
+  await page.click('#share-btn');
+  await page.waitForSelector('#share-dialog[open]');
+  expect((await page.inputValue('#print-meta')) === 'Which city?', 'the replaced poster line stays');
+  await page.fill('#print-meta', '');
+  await page.keyboard.press('Escape');
+
   // 3D print file: a binary STL of the chosen size in millimetres
   await page.click('#share-btn');
   await page.waitForSelector('#share-dialog[open]');

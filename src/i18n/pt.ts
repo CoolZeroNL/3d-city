@@ -152,6 +152,7 @@ export const pt: Messages = {
   shareText: (place) => `${place} em 3D. Faça a maquete do seu lugar:`,
   thisPlace: 'Este lugar',
   titleField: 'Título no pôster e na impressão',
+  metaField: 'Linha pequena no pôster',
   secondLine: 'Segunda linha',
   optional: 'opcional',
   secondLineExample: 'Onde nos conhecemos · junho de 2019',

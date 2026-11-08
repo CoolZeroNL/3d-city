@@ -15,7 +15,7 @@ import { depthInMetres, GREEN_RAISE_MM, shiftMasked, sinkWater, WATER_DEPTH_MM }
 import { ROAD_RAISE_MM, type PrintRoad } from './export/roads';
 import { ROAD_SINK_MM } from './export/sunkenRoads';
 import { addLabel, loadGlyphs } from './export/label';
-import { exportFileName, makePoster, posterFileName } from './ui/poster';
+import { exportFileName, makePoster, posterFileName, posterMeta } from './ui/poster';
 import { setupSearch } from './ui/search';
 import { NoticeView } from './ui/notice';
 import { StatusView } from './ui/status';
@@ -853,6 +853,9 @@ function bindShare(): void {
   let autoTitle = '';
   const title = () => titleInput.value.trim() || autoTitle;
   const subtitle = () => subtitleInput.value.trim();
+  // the poster's small line: coordinates, area and terrain until the user replaces or clears it
+  const metaInput = $<HTMLInputElement>('print-meta');
+  let autoMeta = '';
 
   $('share-btn').addEventListener('click', () => {
     writeHash();
@@ -863,6 +866,10 @@ function bindShare(): void {
     if (!titleInput.value.trim() || titleInput.value === autoTitle) titleInput.value = place;
     autoTitle = place;
     titleInput.placeholder = place;
+    const meta = state.center ? posterMeta(state.center, state.size, state.exaggeration) : '';
+    if (metaInput.value === autoMeta) metaInput.value = meta;
+    autoMeta = meta;
+    metaInput.placeholder = meta;
     dialog.showModal();
   });
 
@@ -890,7 +897,7 @@ function bindShare(): void {
     posterBtn.disabled = true;
     msg.textContent = t.renderingPoster;
     try {
-      const blob = await makePoster(viewer, { title: title(), subtitle: subtitle(), center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
+      const blob = await makePoster(viewer, { title: title(), subtitle: subtitle(), meta: metaInput.value, center: state.center, sizeM: state.size, exaggeration: state.exaggeration });
       saveBlob(blob, posterFileName(title(), state.size));
       msg.textContent = '';
       dialog.close();

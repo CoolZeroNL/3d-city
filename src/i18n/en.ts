@@ -157,6 +157,7 @@ export const en = {
   shareText: (place: string) => `${place} in 3D. Make one of your own place:`,
   thisPlace: 'This place',
   titleField: 'Title on the poster and print',
+  metaField: 'Small line on the poster',
   secondLine: 'Second line',
   optional: 'optional',
   secondLineExample: 'Where we met · June 2019',
