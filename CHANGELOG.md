@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.2 — 2026-11-08
+
+- Raised roads are clean, closed pieces at the edge of the print too. Where a road crossed the border, it was sometimes split right there into two pieces that ended in the same edge. Slicers mostly repaired that without a word; now every piece in the file is closed on its own.
+
 ## 1.7.1 — 2026-11-08
 
 - Sunken roads for 3D prints: roads, paths and railways can be cut 0.6 mm into the ground instead of standing 0.4 mm above it, with sharp edges to paint along or fill. Bridges stay raised. Suggested on Reddit.

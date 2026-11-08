@@ -142,6 +142,24 @@ describe('raised roads in prints', () => {
     expect(topAt(t, 0, -20)).toBeCloseTo(topAt(plain, 0, -20)!, 6);
   });
 
+  it('never ends two pieces in the same edge where roads cross the border, on steep ground', () => {
+    // steep both ways, so the ground bends hard at the border (it stops there)
+    const g = hill();
+    const steep = { ...g, elev: g.elev.map((v, k) => v + 3 * (k % g.n) + 2 * Math.floor(k / g.n)) };
+    const roads: PrintRoad[] = [];
+    for (let k = 0; k < 60; k++) {
+      const a = -400 + k * 13.7;
+      roads.push({ pts: [[-650 - k * 1.37, a], [620 + k * 2.11, a]], widthM: 6, bridge: false }); // east-west
+      roads.push({ pts: [[a, -640 - k * 1.73], [a, 610 + k * 1.19]], widthM: 5, bridge: false }); // north-south
+      roads.push({ pts: [[-560, a], [560, a + 40 + k]], widthM: 7, bridge: false }); // a little slanted
+    }
+    for (const sideMm of [100, 150, 200]) {
+      const t = new Triangles();
+      addRoads(t, steep, roads, { s: sideMm / 1000, exaggeration: 1.5 });
+      expect(closedShells(t)).toBe(true);
+    }
+  });
+
   it('makes no shared faces from the same road given twice', () => {
     const g = hill();
     const road: PrintRoad = { pts: [[-100, 50], [100, 60]], widthM: 6, bridge: false };

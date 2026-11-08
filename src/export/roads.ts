@@ -88,6 +88,49 @@ function clipConvex(poly: Pt[], x0: number, y0: number, x1: number, y1: number):
   return out;
 }
 
+/**
+ * Where a strip meets the square |x|, |y| ≤ e: the strip runs from p along the unit vector u, w
+ * either side of it. Returns the first and last distance along u, or null if it misses.
+ */
+function stripSpan(p: Pt, u: Pt, w: number, e: number): [number, number] | null {
+  const nx = -u[1];
+  const ny = u[0];
+  let lo = Infinity;
+  let hi = -Infinity;
+  // its two edges, each cut to the square
+  for (const side of [-1, 1]) {
+    let a = -Infinity;
+    let b = Infinity;
+    for (let ax = 0; ax < 2; ax++) {
+      const o = p[ax] + (ax === 0 ? nx : ny) * side * w;
+      if (Math.abs(u[ax]) < 1e-12) {
+        if (Math.abs(o) > e) a = Infinity;
+        continue;
+      }
+      const t0 = (-e - o) / u[ax];
+      const t1 = (e - o) / u[ax];
+      a = Math.max(a, Math.min(t0, t1));
+      b = Math.min(b, Math.max(t0, t1));
+    }
+    if (a <= b) {
+      lo = Math.min(lo, a);
+      hi = Math.max(hi, b);
+    }
+  }
+  // and the square's corners that lie on it
+  for (const cx of [-e, e]) {
+    for (const cy of [-e, e]) {
+      const dx = cx - p[0];
+      const dy = cy - p[1];
+      if (Math.abs(dx * nx + dy * ny) > w) continue;
+      const d = dx * u[0] + dy * u[1];
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+  }
+  return lo <= hi ? [lo, hi] : null;
+}
+
 /** Twice the signed area of a polygon (anticlockwise positive). */
 function area2(p: Pt[]): number {
   let a = 0;
@@ -217,12 +260,16 @@ export function addRoads(t: Triangles, grid: HeightGrid, roads: PrintRoad[], opt
       const uy = (q[1] - p[1]) / len;
       const nx = -uy;
       const ny = ux;
-      const from = -mitre(k);
-      const to = len + mitre(k + 1);
+      // only the part that meets the square, and a hair more: outside it the ground stops, which
+      // looks like a bend and would cut the road right at the border, into two pieces that both
+      // end in the same edge there
+      const span = stripSpan(p, [ux, uy], w, edge);
+      const from = Math.max(-mitre(k), span ? span[0] - overlap : Infinity);
+      const to = Math.min(len + mitre(k + 1), span ? span[1] + overlap : -Infinity);
       const at = (d: number, side: number): Pt => [p[0] + ux * d + nx * side * w, p[1] + uy * d + ny * side * w];
       // sample the ground along both edges and the middle; cut where it bends
-      const count = Math.max(1, Math.ceil((to - from) / (step / 2)));
-      const ds = Array.from({ length: count + 1 }, (_, i) => from + ((to - from) * i) / count);
+      const count = to > from ? Math.max(1, Math.ceil((to - from) / (step / 2))) : 0;
+      const ds = count ? Array.from({ length: count + 1 }, (_, i) => from + ((to - from) * i) / count) : [];
       const z = ds.map((d) => [-1, 0, 1].map((side) => ground(at(d, side))));
       const cuts = [0];
       let start = 0;
@@ -241,10 +288,12 @@ export function addRoads(t: Triangles, grid: HeightGrid, roads: PrintRoad[], opt
         }
       }
       cuts.push(count);
-      for (let c = 0; c < cuts.length - 1; c++) {
+      // no cut so near an end that the pieces either side of it would both reach the border
+      const kept = cuts.filter((c, i) => i === 0 || i === cuts.length - 1 || (ds[c] - from > 3 * overlap && to - ds[c] > 3 * overlap));
+      for (let c = 0; count > 0 && c < kept.length - 1; c++) {
         // each piece runs on a little into the next, so they overlap instead of touching
-        const d0 = ds[cuts[c]] - (c > 0 ? overlap : 0);
-        const d1 = ds[cuts[c + 1]] + (c < cuts.length - 2 ? overlap : 0);
+        const d0 = ds[kept[c]] - (c > 0 ? overlap : 0);
+        const d1 = ds[kept[c + 1]] + (c < kept.length - 2 ? overlap : 0);
         const a0 = lengths[k] + Math.max(0, Math.min(len, d0));
         const a1 = lengths[k] + Math.max(0, Math.min(len, d1));
         piece([at(d0, -1), at(d1, -1), at(d1, 1), at(d0, 1)], [a0, a1, a1, a0]);

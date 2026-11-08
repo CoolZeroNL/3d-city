@@ -450,6 +450,7 @@ try {
     `raised roads add ${painted.count - bare.count} triangles and stay inside the square (${painted.size.map((v) => v.toFixed(2)).join(' × ')} mm)`,
   );
   expect(/Parks and woods raised 0\.6 mm\./.test(paintedMsg), 'the park and the forest in the test city are raised');
+  expect(openEdges(painted) === 0, `the print with raised roads and parks is closed shells (${openEdges(painted)} open edges)`);
   // sunken roads: cut into the ground instead, still one closed print inside the square
   await page.click('#print-roads-group [data-value="sunk"]');
   const sunk = await printFile('06i-roads-sunk.stl');
