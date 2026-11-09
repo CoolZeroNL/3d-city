@@ -267,8 +267,9 @@
             </fieldset>
             <label class="check"><input type="checkbox" id="print-colour" /> <span data-t="colourFile">In colour: a 3MF for AMS and MMU printers</span></label>
             <small class="colour-note" id="colour-note" data-t="colourSlots" hidden>Filament 1 ground, 2 buildings, 3 roads, 4 water</small>
-            <div class="series" id="series">
-              <p class="series-intro" id="series-intro" data-t="seriesIntro">Bigger than one square? Print this one, then the squares next to it: they fit together at the edges.</p>
+            <details class="series" id="series">
+              <summary data-t="seriesMore">Want to print more of the area?</summary>
+              <p class="series-intro" id="series-intro" data-t="seriesIntro">Print this square, then the squares next to it: they fit together at the edges.</p>
               <button type="button" class="btn btn-wide" id="series-start" data-t="seriesStart">Make a bigger map from several squares</button>
               <div class="series-on" id="series-on" hidden>
                 <p class="series-where"><strong id="series-where"></strong><small id="series-fixed"></small></p>
@@ -293,7 +294,7 @@
                 </div>
                 <button type="button" class="series-stop" id="series-stop" data-t="seriesStop">Leave the bigger map</button>
               </div>
-            </div>
+            </details>
             <button type="button" class="btn btn-wide" id="stl-btn" data-t="stlButton">Download 3D print file (STL)</button>
           </div>
           <p class="dialog-note" id="share-msg" role="status" aria-live="polite"></p>

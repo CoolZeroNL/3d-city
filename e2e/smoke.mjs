@@ -645,6 +645,10 @@ try {
   await waitStage(bm, ['ready', 'error']);
   await bm.click('#share-btn');
   await bm.click('#print-size-group [data-value="100"]');
+  await bm.locator('#series').scrollIntoViewIfNeeded();
+  await shot(bm, '12b-bigger-map-folded');
+  expect(!(await bm.isVisible('#series-start')), 'the bigger map is folded away until asked for');
+  await bm.click('#series summary');
   await bm.click('#series-start');
   await bm.waitForFunction(() => /ser=/.test(location.hash) && window.__yourPlace.stage === 'ready', null, { timeout: 120000 }).catch(() => undefined);
   const ser0 = await bm.evaluate(() => ({ s: window.__yourPlace.state().series, min: window.__yourPlace.stats()?.minElev }));

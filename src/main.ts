@@ -865,6 +865,8 @@ function bindShare(): void {
   /** Show the bigger map's panel and lock what every square must share. */
   function syncSeries(): void {
     const s = state.series;
+    // the bigger map stays folded away until asked for, and open while one is on
+    if (s) $<HTMLDetailsElement>('series').open = true;
     $('series-intro').hidden = !!s;
     $('series-start').hidden = !!s;
     $('series-on').hidden = !s;
