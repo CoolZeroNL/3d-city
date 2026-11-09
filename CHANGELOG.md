@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.4 — 2026-11-09
+
+- Roads in colour without raising or sinking them: with "In colour" ticked and Roads on "Level", the roads are painted flush with the ground in filament 3, and bridges stand raised. Until now level roads weren't in the print at all, so they got no colour.
+
 ## 1.7.3 — 2026-11-09
 
 - 3D prints in colour: tick "In colour" and the print comes as a 3MF whose surfaces are already painted for multi-material printers: filament 1 for the ground, 2 for the buildings and the title, 3 for the roads, 4 for the water. Four filaments, as an AMS or AMS Lite holds; made for Bambu Studio, OrcaSlicer and PrusaSlicer. The colour file is also much smaller than the STL (2.3 instead of 12 MB for a 2 km town). Tiles work too: a ZIP of 3MF files. Suggested on Reddit.

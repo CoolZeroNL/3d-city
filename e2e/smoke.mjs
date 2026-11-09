@@ -466,9 +466,10 @@ try {
   expect((await page.textContent('#stl-btn')).includes('3MF') && (await page.isVisible('#colour-note')), 'the colour tick turns the button into a 3MF download and shows the filaments');
   await page.locator('#colour-note').scrollIntoViewIfNeeded();
   await shot(page, '06j-colour-option');
-  {
+  /** The colour file: its paint codes by count, triangles and open edges (0 when every shell is closed). */
+  const colourFile = async (name) => {
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#stl-btn')]);
-    const path = join(out, '06j-colour.3mf');
+    const path = join(out, name);
     await dl.saveAs(path);
     const zip = readFileSync(path);
     const files = new Map();
@@ -490,11 +491,23 @@ try {
       const [a, b] = d.split('>');
       if (n !== 1 || seen.get(`${b}>${a}`) !== 1) open++;
     }
+    return { dl, zip, files, paints, tris: tris.length, open };
+  };
+  {
+    const c = await colourFile('06j-colour.3mf');
     expect(
-      /-10cm\.3mf$/.test(dl.suggestedFilename()) && files.has('[Content_Types].xml') && paints['8'] > 1000 && paints['0C'] > 1000 && paints['1C'] > 100 && open === 0,
-      `colour 3MF saved (${dl.suggestedFilename()}, ${(zip.length / 1048576).toFixed(1)} MB, ${tris.length} triangles: ${paints['8']} buildings, ${paints['0C']} roads, ${paints['1C']} water, ${open} open edges)`,
+      /-10cm\.3mf$/.test(c.dl.suggestedFilename()) && c.files.has('[Content_Types].xml') && c.paints['8'] > 1000 && c.paints['0C'] > 1000 && c.paints['1C'] > 100 && c.open === 0,
+      `colour 3MF saved (${c.dl.suggestedFilename()}, ${(c.zip.length / 1048576).toFixed(1)} MB, ${c.tris} triangles: ${c.paints['8']} buildings, ${c.paints['0C']} roads, ${c.paints['1C']} water, ${c.open} open edges)`,
     );
     expect(/In colour: filament 1 ground, 2 buildings and title, 3 roads, 4 water\./.test(await page.textContent('#share-msg')), 'the dialog lists the filaments');
+    // level roads in colour: painted flush with the ground
+    await page.click('#print-roads-group [data-value="level"]');
+    const level = await colourFile('06k-colour-level-roads.3mf');
+    expect(
+      level.paints['0C'] > 1000 && level.open === 0 && /Roads level with the ground, painted\./.test(await page.textContent('#share-msg')),
+      `level roads are painted in colour (${level.paints['0C']} road triangles, ${level.open} open edges, ${(level.zip.length / 1048576).toFixed(1)} MB)`,
+    );
+    await page.click('#print-roads-group [data-value="sunk"]');
   }
   await page.uncheck('#print-colour');
   await page.click('#print-roads-group [data-value="level"]');

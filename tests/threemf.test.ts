@@ -158,6 +158,35 @@ describe('the colour print file (3MF)', () => {
     expect(filamentAt(m, mm(-120), mm(60))).toBe(1);
   });
 
+  it('paints level roads flush with the ground, without lowering or raising them', () => {
+    const { grid, water } = riverTown();
+    const painted = buildPrint(grid, [], { sideMm: 100, baseMm: 3, exaggeration: 1, water, paintRoads: true }, roads);
+    const plain = buildPrint(grid, [], { sideMm: 100, baseMm: 3, exaggeration: 1, water }, []);
+    expect(painted.roadsRaisedInstead).toBe(false);
+    const m = parse(modelXml(painted, 'Test', 'a test'));
+    const p = parse(modelXml(plain, 'Test', 'a test'));
+    expect(closedByIndex(m)).toBe(true);
+    expect(filamentAt(m, mm(100), mm(-10))).toBe(PAINT.roads);
+    expect(filamentAt(m, mm(-10), mm(60))).toBe(PAINT.roads);
+    expect(filamentAt(m, mm(80), mm(-180))).toBe(PAINT.water);
+    expect(filamentAt(m, mm(-120), mm(60))).toBe(1);
+    // the same ground as without roads, to a few micrometres (cut faces may span a cell's diagonal)
+    const height = (mesh: Mesh, x: number, y: number) => {
+      let best = -Infinity;
+      for (const t of mesh.triangles) {
+        const [[ax, ay, az], [bx, by, bz], [cx, cy, cz]] = t.v.map((i) => mesh.vertices[i]);
+        const den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+        if (den <= 1e-12) continue;
+        const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / den;
+        const l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / den;
+        if (l1 < -1e-9 || l2 < -1e-9 || 1 - l1 - l2 < -1e-9) continue;
+        best = Math.max(best, l1 * az + l2 * bz + (1 - l1 - l2) * cz);
+      }
+      return best;
+    };
+    for (const [x, y] of [[100, -10], [-10, 60], [-10, -8], [37, -4.5], [-120, 60]]) expect(height(m, mm(x), mm(y))).toBeCloseTo(height(p, mm(x), mm(y)), 2);
+  });
+
   it('paints the water in every tile that has some', () => {
     const { grid, water } = riverTown();
     const tiles = buildTiledPrint(grid, [], { sideMm: 100, baseMm: 3, exaggeration: 1, water, tiles: 2 }, []);

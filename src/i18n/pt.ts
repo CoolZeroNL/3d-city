@@ -194,6 +194,7 @@ export const pt: Messages = {
   greenRaised: (mm) => ` Parques e matas ${mm} mm mais altos.`,
   roadsRaised: (mm) => ` Ruas ${mm} mm mais altas.`,
   roadsSunk: (mm) => ` Ruas ${mm} mm mais baixas.`,
+  roadsPainted: ' Ruas no nível do chão, só pintadas.',
   colourSaved: ' Colorido: filamento 1 terreno, 2 prédios e título, 3 ruas, 4 água.',
   roadsRaisedInstead: (mm) => ` Não deu para rebaixar as ruas aqui, então elas ficam ${mm} mm mais altas.`,
   brokenLeftOut: (n, count) => (count === 1 ? ' 1 prédio com contorno quebrado nos dados do mapa ficou de fora.' : ` ${n} prédios com contorno quebrado nos dados do mapa ficaram de fora.`),
@@ -210,6 +211,7 @@ export const pt: Messages = {
   readmeGreen: (mm) => `Parques, jardins e matas ficam ${mm} mm acima da terra.`,
   readmeRoads: (mm) => `Ruas, caminhos e ferrovias ficam ${mm} mm acima do chão, com bordas nítidas.`,
   readmeRoadsSunk: (mm) => `Ruas, caminhos e ferrovias ficam ${mm} mm abaixo do chão, com bordas nítidas; as pontes continuam elevadas.`,
+  readmeRoadsPainted: 'Ruas, caminhos e ferrovias ficam no nível do chão, pintadas com o próprio filamento; as pontes ficam elevadas.',
   readmeColour: 'Os arquivos 3MF estão pintados para impressão colorida: filamento 1 terreno, 2 prédios e título, 3 ruas, 4 água. Abra no Bambu Studio, OrcaSlicer ou PrusaSlicer com quatro filamentos configurados.',
   readmeCredit: 'Dados do mapa © colaboradores do OpenStreetMap (ODbL). Relevo: Mapzen terrain tiles no AWS Open Data.',
 };

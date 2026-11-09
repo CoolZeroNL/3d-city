@@ -834,18 +834,20 @@ function bindShare(): void {
       grid = shiftMasked(grid, green, metres(GREEN_RAISE_MM));
       done.green = true;
     }
-    const roads: PrintRoad[] = roadsMode !== 'level' ? m.printRoads() : [];
+    // level roads are left out, except in colour: then they're painted, flush with the ground
+    const roads: PrintRoad[] = roadsMode !== 'level' || colour ? m.printRoads() : [];
     done.roads = roads.length > 0;
     const sinkRoadsMm = done.roads && roadsMode === 'sunk' ? ROAD_SINK_MM : undefined;
+    const paintRoads = done.roads && roadsMode === 'level';
     /** The note once the print is built: sunk roads that had to be raised after all say so. */
     const note = (raisedInstead: boolean) =>
       [
         done.water ? t.waterSunk(num(WATER_DEPTH_MM)) : '',
         done.green ? t.greenRaised(num(GREEN_RAISE_MM, 1)) : '',
-        !done.roads ? '' : raisedInstead ? t.roadsRaisedInstead(num(ROAD_RAISE_MM, 1)) : sinkRoadsMm ? t.roadsSunk(num(ROAD_SINK_MM, 1)) : t.roadsRaised(num(ROAD_RAISE_MM, 1)),
+        !done.roads ? '' : raisedInstead ? t.roadsRaisedInstead(num(ROAD_RAISE_MM, 1)) : sinkRoadsMm ? t.roadsSunk(num(ROAD_SINK_MM, 1)) : paintRoads ? t.roadsPainted : t.roadsRaised(num(ROAD_RAISE_MM, 1)),
         colour ? t.colourSaved : '',
       ].join('');
-    return { grid, roads, done, sinkRoadsMm, note, colour, water: colour && water ? water : undefined };
+    return { grid, roads, done, sinkRoadsMm, paintRoads, note, colour, water: colour && water ? water : undefined };
   };
   const tilesRange = $<HTMLInputElement>('tiles-range');
   tilesRange.max = String(MAX_TILES);
@@ -937,7 +939,7 @@ function bindShare(): void {
       }
       const scale = printScale(state.size, printMm);
       const terrain = printLayers(printMm);
-      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, water: terrain.water }, terrain.roads);
+      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water }, terrain.roads);
       const brokenBuildings = tris.skipped;
       // the title in raised letters on a strip in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
@@ -967,7 +969,7 @@ function bindShare(): void {
     const totalMm = printMm * n;
     const scale = printScale(state.size, totalMm);
     const terrain = printLayers(totalMm);
-    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, water: terrain.water, tiles: n }, terrain.roads);
+    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water, tiles: n }, terrain.roads);
     const raisedInstead = tiles.some((tile) => tile.tris.roadsRaisedInstead);
     const ext = terrain.colour ? '3mf' : 'stl';
     /** One piece of the ZIP: an STL, or a colour 3MF (already compressed, so stored as it is). */
@@ -995,7 +997,7 @@ function bindShare(): void {
       label ? t.readmeStrip(`title.${ext}`) : '',
       terrain.done.water ? t.readmeWater(num(WATER_DEPTH_MM)) : '',
       terrain.done.green ? t.readmeGreen(num(GREEN_RAISE_MM, 1)) : '',
-      !terrain.done.roads ? '' : terrain.sinkRoadsMm && !raisedInstead ? t.readmeRoadsSunk(num(ROAD_SINK_MM, 1)) : t.readmeRoads(num(ROAD_RAISE_MM, 1)),
+      !terrain.done.roads ? '' : raisedInstead ? t.readmeRoads(num(ROAD_RAISE_MM, 1)) : terrain.sinkRoadsMm ? t.readmeRoadsSunk(num(ROAD_SINK_MM, 1)) : terrain.paintRoads ? t.readmeRoadsPainted : t.readmeRoads(num(ROAD_RAISE_MM, 1)),
       terrain.colour ? t.readmeColour : '',
       '',
       t.readmeCredit,

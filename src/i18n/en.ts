@@ -199,6 +199,7 @@ export const en = {
   greenRaised: (mm: string) => ` Parks and woods raised ${mm} mm.`,
   roadsRaised: (mm: string) => ` Roads raised ${mm} mm.`,
   roadsSunk: (mm: string) => ` Roads sunk ${mm} mm.`,
+  roadsPainted: ' Roads level with the ground, painted.',
   colourSaved: ' In colour: filament 1 ground, 2 buildings and title, 3 roads, 4 water.',
   roadsRaisedInstead: (mm: string) => ` The roads couldn’t be cut in here, so they’re raised ${mm} mm instead.`,
   brokenLeftOut: (n: string, count: number) => ` ${n} building${count === 1 ? '' : 's'} with a broken outline in the map data left out.`,
@@ -215,6 +216,7 @@ export const en = {
   readmeGreen: (mm: string) => `Parks, gardens and woods stand ${mm} mm above the land.`,
   readmeRoads: (mm: string) => `Roads, paths and railways stand ${mm} mm above the ground, with sharp edges.`,
   readmeRoadsSunk: (mm: string) => `Roads, paths and railways are cut ${mm} mm into the ground, with sharp edges; bridges stay raised.`,
+  readmeRoadsPainted: 'Roads, paths and railways are level with the ground, painted in their own filament; bridges stand raised.',
   readmeColour: 'The 3MF files are painted for multi-colour printing: filament 1 ground, 2 buildings and title, 3 roads, 4 water. Open them in Bambu Studio, OrcaSlicer or PrusaSlicer with four filaments set up.',
   readmeCredit: 'Map data © OpenStreetMap contributors (ODbL). Terrain: Mapzen terrain tiles on AWS Open Data.',
 };

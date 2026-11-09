@@ -29,7 +29,7 @@ works on your phone.**
   print bed. For painting, water sits 1 mm below the land, parks and woods (0.6 mm) can stand above it,
   and roads can stand 0.4 mm above it or be cut 0.6 mm into it. Every exported shell is checked to be
   watertight. For multi-material printers, save it in colour instead: a 3MF already painted with four
-  filaments (1 ground, 2 buildings and title, 3 roads, 4 water).
+  filaments (1 ground, 2 buildings and title, 3 roads, 4 water), with level roads painted flush.
 
 ## Controls
 
@@ -136,7 +136,8 @@ Design notes:
   and each triangle carries its filament the way the slicers store their own multi-material painting
   (`paint_color` for Bambu Studio and OrcaSlicer, `slic3rpe:mmu_segmentation` for PrusaSlicer, one
   code for both). The ground's top triangles take the water's colour where two of their three corners
-  are water; buried undersides stay unpainted. Sliced in PrusaSlicer 2.7 as a four-filament printer,
+  are water; buried undersides stay unpainted. Level roads are cut into the ground's top as sunken
+  roads are, at no depth: their edges split the triangles, so the paint follows the road exactly. Sliced in PrusaSlicer 2.7 as a four-filament printer,
   every point of a test town well inside one colour came out on top in that filament.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 

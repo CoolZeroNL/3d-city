@@ -194,6 +194,7 @@ export const es: Messages = {
   greenRaised: (mm) => ` Parques y bosques ${mm} mm más altos.`,
   roadsRaised: (mm) => ` Calles ${mm} mm más altas.`,
   roadsSunk: (mm) => ` Calles ${mm} mm más bajas.`,
+  roadsPainted: ' Calles a ras del suelo, solo pintadas.',
   colourSaved: ' A color: filamento 1 terreno, 2 edificios y título, 3 calles, 4 agua.',
   roadsRaisedInstead: (mm) => ` Aquí no se pudieron hundir las calles, así que quedan ${mm} mm más altas.`,
   brokenLeftOut: (n, count) => (count === 1 ? ' Se omitió 1 edificio con un contorno defectuoso en los datos del mapa.' : ` Se omitieron ${n} edificios con un contorno defectuoso en los datos del mapa.`),
@@ -210,6 +211,7 @@ export const es: Messages = {
   readmeGreen: (mm) => `Parques, jardines y bosques quedan ${mm} mm por encima de la tierra.`,
   readmeRoads: (mm) => `Calles, caminos y vías de tren quedan ${mm} mm por encima del suelo, con bordes nítidos.`,
   readmeRoadsSunk: (mm) => `Calles, caminos y vías de tren quedan ${mm} mm por debajo del suelo, con bordes nítidos; los puentes siguen elevados.`,
+  readmeRoadsPainted: 'Calles, caminos y vías de tren quedan a ras del suelo, pintadas con su propio filamento; los puentes quedan elevados.',
   readmeColour: 'Los archivos 3MF están pintados para imprimir a varios colores: filamento 1 terreno, 2 edificios y título, 3 calles, 4 agua. Ábrelos en Bambu Studio, OrcaSlicer o PrusaSlicer con cuatro filamentos configurados.',
   readmeCredit: 'Datos del mapa © colaboradores de OpenStreetMap (ODbL). Relieve: Mapzen terrain tiles en AWS Open Data.',
 };

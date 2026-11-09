@@ -194,6 +194,7 @@ export const de: Messages = {
   greenRaised: (mm) => ` Parks und Wälder ${mm} mm höher.`,
   roadsRaised: (mm) => ` Straßen ${mm} mm höher.`,
   roadsSunk: (mm) => ` Straßen ${mm} mm tiefer.`,
+  roadsPainted: ' Straßen eben, nur bemalt.',
   colourSaved: ' In Farbe: Filament 1 Gelände, 2 Gebäude und Titel, 3 Straßen, 4 Wasser.',
   roadsRaisedInstead: (mm) => ` Die Straßen ließen sich hier nicht vertiefen, sie sind stattdessen ${mm} mm höher.`,
   brokenLeftOut: (n, count) => (count === 1 ? ' 1 Gebäude mit fehlerhaftem Umriss in den Kartendaten wurde weggelassen.' : ` ${n} Gebäude mit fehlerhaftem Umriss in den Kartendaten wurden weggelassen.`),
@@ -210,6 +211,7 @@ export const de: Messages = {
   readmeGreen: (mm) => `Parks, Gärten und Wälder stehen ${mm} mm über dem Land.`,
   readmeRoads: (mm) => `Straßen, Wege und Bahnlinien stehen ${mm} mm über dem Boden, mit scharfen Kanten.`,
   readmeRoadsSunk: (mm) => `Straßen, Wege und Bahnlinien liegen ${mm} mm tief im Boden, mit scharfen Kanten; Brücken bleiben erhöht.`,
+  readmeRoadsPainted: 'Straßen, Wege und Bahnlinien liegen eben im Boden, in ihrem eigenen Filament bemalt; Brücken stehen erhöht.',
   readmeColour: 'Die 3MF-Dateien sind für den Mehrfarbdruck bemalt: Filament 1 Gelände, 2 Gebäude und Titel, 3 Straßen, 4 Wasser. Öffne sie in Bambu Studio, OrcaSlicer oder PrusaSlicer mit vier eingerichteten Filamenten.',
   readmeCredit: 'Kartendaten © OpenStreetMap-Mitwirkende (ODbL). Gelände: Mapzen terrain tiles auf AWS Open Data.',
 };

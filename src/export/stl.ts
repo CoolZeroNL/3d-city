@@ -44,6 +44,11 @@ export interface PrintOptions {
   /** Cut the roads this deep into the ground (mm) instead of raising them. */
   sinkRoadsMm?: number;
   /**
+   * Leave the roads level and only paint them (for the colour file): the ground is cut along their
+   * edges as for sunken roads, but not lowered. Ignored when `sinkRoadsMm` is set.
+   */
+  paintRoads?: boolean;
+  /**
    * Water at each point of the height grid (1, or a share between 0 and 1 where it was resampled),
    * for the colour file: the ground's triangles over water get the water's filament.
    */
@@ -116,19 +121,21 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
   const t = new Triangles();
   const s = opts.sideMm / grid.sizeM; // mm per metre
   const base = -opts.baseMm;
-  let sink = roads.length && opts.sinkRoadsMm ? opts.sinkRoadsMm : 0;
-  if (sink) {
+  const sink = roads.length && opts.sinkRoadsMm ? opts.sinkRoadsMm : 0;
+  // sunken roads are cut in; painted ones too, at no depth: the same edges, no walls
+  let cut = roads.length > 0 && (sink > 0 || !!opts.paintRoads);
+  if (cut) {
     try {
       addCarvedTerrainBlock(t, grid, roads, { s, exaggeration: opts.exaggeration, base, depthMm: sink, water: opts.water });
     } catch (err) {
       // never seen, but a print with raised roads beats no print
-      console.warn('sunken roads failed, raising them instead', err);
+      console.warn('cutting the roads in failed, raising them instead', err);
       t.count = 0;
       t.roadsRaisedInstead = true;
-      sink = 0;
+      cut = false;
     }
   }
-  if (!sink) addTerrainBlock(t, grid, opts.exaggeration, s, base, opts.water);
+  if (!cut) addTerrainBlock(t, grid, opts.exaggeration, s, base, opts.water);
   t.colour = PAINT.buildings;
   // building columns start halfway into the base: always inside the block
   const bottom = base / 2;
@@ -139,7 +146,7 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
     addPrism(t, b.poly, b.top * s, bottom - gap * 0.3 * (i % 97), s, gap * (1 + 0.4 * (i % 5)));
   });
   t.colour = PAINT.roads;
-  if (sink) {
+  if (cut) {
     // bridges stay raised: over water and valleys there is nothing to cut them into
     const bridges = roads.filter((r) => r.bridge);
     if (bridges.length) addRoads(t, grid, bridges, { s, exaggeration: opts.exaggeration, buryMm: sink + BURY_MM });
