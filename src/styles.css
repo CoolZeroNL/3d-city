@@ -1224,6 +1224,12 @@ input[type='range'] {
   font-size: 13px;
 }
 
+.colour-note {
+  margin: -4px 0 0 26px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .paint-set legend {
   padding: 0;
   margin-bottom: 8px;

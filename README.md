@@ -28,7 +28,8 @@ works on your phone.**
   (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300), in one piece or in up to 8 × 8 tiles that fit your
   print bed. For painting, water sits 1 mm below the land, parks and woods (0.6 mm) can stand above it,
   and roads can stand 0.4 mm above it or be cut 0.6 mm into it. Every exported shell is checked to be
-  watertight.
+  watertight. For multi-material printers, save it in colour instead: a 3MF already painted with four
+  filaments (1 ground, 2 buildings and title, 3 roads, 4 water).
 
 ## Controls
 
@@ -129,6 +130,14 @@ Design notes:
   cells, so the block stays one closed shell: cells the edge crosses are split into land and road
   faces (earcut), 0.6 mm apart, with vertical walls between; the rest keep the terrain's two
   triangles. Bridges stay raised. About 0.3–0.5 s for a dense 2 km square.
+- **The colour file paints, it doesn't split.** Water and parks are only moved grid points of the
+  terrain block, so they can't be pieces of their own, and parts that overlap get resolved
+  differently by each slicer. So the 3MF holds the same closed shells as the STL, as one object,
+  and each triangle carries its filament the way the slicers store their own multi-material painting
+  (`paint_color` for Bambu Studio and OrcaSlicer, `slic3rpe:mmu_segmentation` for PrusaSlicer, one
+  code for both). The ground's top triangles take the water's colour where two of their three corners
+  are water; buried undersides stay unpainted. Sliced in PrusaSlicer 2.7 as a four-filament printer,
+  every point of a test town well inside one colour came out on top in that filament.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
 
 ## Technical choices
@@ -146,8 +155,8 @@ Design notes:
 
 ## Data and licences
 
-- Map data © OpenStreetMap contributors, ODbL. Attribution is shown in the app, on posters and in
-  the STL file header; please keep “© OpenStreetMap contributors” next to anything you share.
+- Map data © OpenStreetMap contributors, ODbL. Attribution is shown in the app, on posters, in
+  the STL file header and in the 3MF's metadata; please keep “© OpenStreetMap contributors” next to anything you share.
 - Vector tiles: [OpenFreeMap](https://openfreemap.org), schema © [OpenMapTiles](https://openmaptiles.org).
   Fallback map data: the [Overpass API](https://overpass-api.de).
 - Terrain: Mapzen terrain tiles on AWS Open Data — see the
@@ -181,21 +190,21 @@ loaded is cached on your device.
 - **Photos on the buildings.** Aerial imagery on roofs and ground is the realistic first step —
   the hard part is an imagery licence that allows it. Street-level photos on façades are a much
   bigger job (coverage, licensing, matching photos to walls).
-- **Multi-colour 3MF** (terrain, buildings, roads and water as separate parts for AMS-style printers),
-  a name engraved in the base, and **poster styles** (title layouts, colours).
+- **A name engraved in the base**, and **poster styles** (title layouts, colours).
 
 ## Testing
 
 `npm test` covers projection, terrain decoding/resampling, polygon clipping and ring assembly,
 OSM parsing (multipolygons, courtyards, building parts, clipping), the height rule, the sea fill,
 building-mesh winding and exaggeration, URL state, and the STL export (every shell closed and
-outward-facing, volumes, binary format).
+outward-facing, volumes, binary format) and the colour 3MF (paint codes read back the way the
+slicers read them, closed by vertex index, which parts get which filament).
 
 `npm run e2e` serves the build, answers Overpass and geocoding from a deterministic synthetic city
 (`e2e/fixtures/synthetic-city.mjs`), uses real terrain tiles, and drives search, every control,
 keyboard camera, pinning a building (click, drag, share-link round-trip, "Centre here"),
 Shift-arrow and two-finger sliding, share link round-trip, poster download, STL download (size and
-base checked), an Overpass outage with retry, a phone
+base checked; raised and sunken roads closed), the colour 3MF (painted, closed), an Overpass outage with retry, a phone
 viewport, and dark mode with reduced motion. It fails on any console error.
 
 ## Licence

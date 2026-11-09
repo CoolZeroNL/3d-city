@@ -1,6 +1,7 @@
 /**
- * A ZIP archive of a few files, stored without compression: every unzip tool and operating
- * system opens it, and it needs no library. STL files compress only moderately anyway.
+ * A ZIP archive of a few files, stored without compression unless an entry brings its own
+ * deflated bytes: every unzip tool and operating system opens it, and it needs no library. STL
+ * files compress only moderately anyway; the colour file's XML shrinks to a fraction.
  */
 
 let crcTable: Uint32Array | null = null;
@@ -24,6 +25,19 @@ export interface ZipEntry {
   /** plain ASCII names, e.g. "tile-A1.stl" */
   name: string;
   data: Uint8Array;
+  /** the same bytes deflated (raw DEFLATE, see deflateRaw), to store them compressed */
+  deflated?: Uint8Array | null;
+}
+
+/** Raw DEFLATE with the browser's own compressor, or null where there is none (then store). */
+export async function deflateRaw(data: Uint8Array): Promise<Uint8Array | null> {
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    const stream = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch {
+    return null; // an older browser without "deflate-raw"
+  }
 }
 
 /** The archive's bytes. Dates are fixed (1 Jan 2020), so the same files give the same archive. */
@@ -37,16 +51,18 @@ export function makeZip(entries: ZipEntry[]): Uint8Array<ArrayBuffer> {
   for (const e of entries) {
     const name = enc.encode(e.name);
     const crc = crc32(e.data);
+    const stored = e.deflated ?? e.data;
+    const method = e.deflated ? 8 : 0;
     const local = new Uint8Array(30 + name.length);
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true); // local file header
     lv.setUint16(4, 20, true); // version needed: 2.0
     lv.setUint16(6, 0, true); // flags
-    lv.setUint16(8, 0, true); // stored, no compression
+    lv.setUint16(8, method, true); // 0 stored, 8 deflated
     lv.setUint16(10, DOS_TIME, true);
     lv.setUint16(12, DOS_DATE, true);
     lv.setUint32(14, crc, true);
-    lv.setUint32(18, e.data.length, true);
+    lv.setUint32(18, stored.length, true);
     lv.setUint32(22, e.data.length, true);
     lv.setUint16(26, name.length, true);
     lv.setUint16(28, 0, true);
@@ -58,19 +74,19 @@ export function makeZip(entries: ZipEntry[]): Uint8Array<ArrayBuffer> {
     dv.setUint16(4, 20, true); // made by
     dv.setUint16(6, 20, true); // version needed
     dv.setUint16(8, 0, true);
-    dv.setUint16(10, 0, true);
+    dv.setUint16(10, method, true);
     dv.setUint16(12, DOS_TIME, true);
     dv.setUint16(14, DOS_DATE, true);
     dv.setUint32(16, crc, true);
-    dv.setUint32(20, e.data.length, true);
+    dv.setUint32(20, stored.length, true);
     dv.setUint32(24, e.data.length, true);
     dv.setUint16(28, name.length, true);
     dv.setUint32(42, offset, true); // where the local header starts
     dir.set(name, 46);
 
-    parts.push(local, e.data);
+    parts.push(local, stored);
     central.push(dir);
-    offset += local.length + e.data.length;
+    offset += local.length + stored.length;
   }
   const dirSize = central.reduce((s, d) => s + d.length, 0);
   const end = new Uint8Array(22);

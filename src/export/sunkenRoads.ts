@@ -22,6 +22,7 @@
 
 import earcut, { deviation } from 'earcut';
 import type { HeightGrid } from '../geo/terrain';
+import { PAINT, wet } from './paint';
 import { ROAD_MIN_MM, ROAD_SKIP_MM, surfaceMm, type PrintRoad } from './roads';
 import type { Triangles } from './stl';
 
@@ -58,6 +59,8 @@ export interface CarveOptions {
   base: number;
   /** how deep roads are cut (mm) */
   depthMm: number;
+  /** water at each grid point, for the colour file (see PrintOptions.water) */
+  water?: ArrayLike<number>;
 }
 
 const UP: V = [0, 0, 1];
@@ -150,9 +153,11 @@ export function addCarvedTerrainBlock(t: Triangles, grid: HeightGrid, roads: Pri
   const low = (p: P): V => [p.x, p.y, p.z - depth];
   const wall = (p: P, q: P) => {
     const out: V = [p.y - q.y, q.x - p.x, 0]; // left of p → q: towards the road
+    t.colour = PAINT.roads;
     t.add(low(p), low(q), top(q), out);
     t.add(low(p), top(q), top(p), out);
   };
+  const water = opts.water;
 
   // --- the top, cell by cell
   for (let j = 0; j < n - 1; j++) {
@@ -163,15 +168,21 @@ export function addCarvedTerrainBlock(t: Triangles, grid: HeightGrid, roads: Pri
       let mixed = false;
       for (let J = J0; J <= J0 + k && !mixed; J++) for (let I = I0; I <= I0 + k; I++) if (road(I, J) !== first) { mixed = true; break; }
       const c = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)]; // anticlockwise from bottom left
+      const g = [j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i];
       if (!mixed) {
         const lift = first ? low : top;
+        t.colour = first ? PAINT.roads : wet(water, g[0], g[1], g[2]) ? PAINT.water : PAINT.ground;
         t.add(lift(c[0]), lift(c[1]), lift(c[2]), UP);
+        t.colour = first ? PAINT.roads : wet(water, g[0], g[2], g[3]) ? PAINT.water : PAINT.ground;
         t.add(lift(c[0]), lift(c[2]), lift(c[3]), UP);
         continue;
       }
-      carveCell(t, cellEdges(I0, J0), c, first, top, low, wall);
+      // the land in a cut cell: water when two of its four corners are
+      const land = wet(water, g[0], g[1], g[2]) || wet(water, g[0], g[2], g[3]) ? PAINT.water : PAINT.ground;
+      carveCell(t, cellEdges(I0, J0), c, first, top, low, wall, land);
     }
   }
+  t.colour = PAINT.ground;
 
   /**
    * The road edge inside the terrain cell whose bottom-left fine point is (I0, J0): chains from
@@ -337,6 +348,7 @@ function carveCell(
   top: (p: P) => V,
   low: (p: P) => V,
   wall: (p: P, q: P) => void,
+  land: number,
 ): void {
   const { chains, loops } = edges;
   const roadFaces: Face[] = [];
@@ -358,7 +370,9 @@ function carveCell(
     if (!best) throw new Error('road island outside its cell');
     best.holes.push(isl.ring);
   }
+  t.colour = PAINT.roads;
   for (const f of roadFaces) fill(t, f, low);
+  t.colour = land;
   for (const f of landFaces) fill(t, f, top);
   for (const ch of chains) for (let q = 0; q < ch.pts.length - 1; q++) wall(ch.pts[q], ch.pts[q + 1]);
   for (const isl of loops) for (let q = 0; q < isl.length; q++) wall(isl[q], isl[(q + 1) % isl.length]);

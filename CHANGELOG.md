@@ -1,7 +1,8 @@
 # Changelog
 
-## 1.7.2 — 2026-11-08
+## 1.8.0 — 2026-11-09
 
+- 3D prints in colour: tick "In colour" and the print comes as a 3MF whose surfaces are already painted for multi-material printers: filament 1 for the ground, 2 for the buildings and the title, 3 for the roads, 4 for the water. Four filaments, as an AMS or AMS Lite holds; made for Bambu Studio, OrcaSlicer and PrusaSlicer. The colour file is also much smaller than the STL (2.3 instead of 12 MB for a 2 km town). Tiles work too: a ZIP of 3MF files. Suggested on Reddit.
 - Raised roads are clean, closed pieces at the edge of the print too. Where a road crossed the border, it was sometimes split right there into two pieces that ended in the same edge. Slicers mostly repaired that without a word; now every piece in the file is closed on its own.
 
 ## 1.7.1 — 2026-11-08

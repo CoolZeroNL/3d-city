@@ -9,6 +9,7 @@
  */
 
 import type { Polygon, Ring } from '../geo/polygon';
+import { PAINT } from './paint';
 import { addSolid, type Triangles } from './stl';
 
 export interface GlyphFont {
@@ -127,7 +128,8 @@ export function addLabel(t: Triangles, font: GlyphFont, lines: string[], sideMm:
   };
   addSolid(t, ledge, ledgeTop, -baseMm + 0.01, 0);
 
-  // the first line nearest the model, read from the front
+  // the first line nearest the model, read from the front; in the colour file, in the buildings' colour
+  t.colour = PAINT.buildings;
   let y = -half - pad;
   for (const { shape, cap } of shaped) {
     const baseline = y - cap;
@@ -138,5 +140,6 @@ export function addLabel(t: Triangles, font: GlyphFont, lines: string[], sideMm:
     }
     y = baseline - descender(cap) - gap;
   }
+  t.colour = PAINT.ground;
   return { missing: [...new Set(shaped.flatMap(({ shape }) => shape.missing))], capMm: shaped.map(({ cap }) => cap), depthMm: depth };
 }

@@ -79,7 +79,9 @@ export function buildTiledPrint(grid: HeightGrid, buildings: PrintBuilding[], op
           return Math.max(x, px) >= x0 - margin && Math.min(x, px) <= x1 + margin && Math.max(y, py) >= y0 - margin && Math.min(y, py) <= y1 + margin;
         }))
         .map((r) => ({ ...r, pts: r.pts.map(([x, y]) => [x - cx, y - cy] as [number, number]) }));
-      const tris = buildPrint(tileGrid(grid, x0, y0, x1, y1, n), pieces, opts, near);
+      // the water under the tile, resampled as the heights are: a share of water at each point
+      const water = opts.water ? tileGrid({ ...grid, elev: Float32Array.from(opts.water) }, x0, y0, x1, y1, n).elev : undefined;
+      const tris = buildPrint(tileGrid(grid, x0, y0, x1, y1, n), pieces, { ...opts, water }, near);
       out.push({ name: tileName(row, col), row, col, tris });
     }
   }

@@ -9,6 +9,7 @@ import { BUILDING_COLOURS, HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
 import { clampSize, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
+import { to3mf } from './export/threemf';
 import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
 import { depthInMetres, GREEN_RAISE_MM, shiftMasked, sinkWater, WATER_DEPTH_MM } from './export/water';
@@ -797,8 +798,11 @@ function bindShare(): void {
     const total = num((printMm * printTiles) / 10);
     $('print-label').textContent = printTiles > 1 ? t.tileSize : t.printSize;
     $('print-note').textContent = printTiles > 1 ? t.tilesNote(num(printTiles * printTiles), total, note) : note;
-    $('stl-btn').textContent = printTiles > 1 ? t.stlTilesButton : t.stlButton;
+    const colour = $<HTMLInputElement>('print-colour').checked;
+    $('stl-btn').textContent = printTiles > 1 ? (colour ? t.colourTilesButton : t.stlTilesButton) : colour ? t.colourButton : t.stlButton;
+    $('colour-note').hidden = !colour;
   };
+  $('print-colour').addEventListener('change', () => updatePrintNote());
   // roads in the print: level with the ground, raised, or cut into it
   let roadsMode = 'level';
   radioGroup('print-roads-group', (v) => {
@@ -817,8 +821,11 @@ function bindShare(): void {
     const metres = (mm: number) => depthInMetres(mm, totalMm, state.size, state.exaggeration);
     let grid = m.grid;
     const done = { water: false, green: false, roads: false };
-    const water = $<HTMLInputElement>('print-water').checked ? m.printWater() : null;
-    if (water) {
+    // the colour file paints the water even where it isn't sunk
+    const colour = $<HTMLInputElement>('print-colour').checked;
+    const sink = $<HTMLInputElement>('print-water').checked;
+    const water = sink || colour ? m.printWater() : null;
+    if (water && sink) {
       grid = sinkWater(grid, water, metres(WATER_DEPTH_MM));
       done.water = true;
     }
@@ -836,8 +843,9 @@ function bindShare(): void {
         done.water ? t.waterSunk(num(WATER_DEPTH_MM)) : '',
         done.green ? t.greenRaised(num(GREEN_RAISE_MM, 1)) : '',
         !done.roads ? '' : raisedInstead ? t.roadsRaisedInstead(num(ROAD_RAISE_MM, 1)) : sinkRoadsMm ? t.roadsSunk(num(ROAD_SINK_MM, 1)) : t.roadsRaised(num(ROAD_RAISE_MM, 1)),
+        colour ? t.colourSaved : '',
       ].join('');
-    return { grid, roads, done, sinkRoadsMm, note };
+    return { grid, roads, done, sinkRoadsMm, note, colour, water: colour && water ? water : undefined };
   };
   const tilesRange = $<HTMLInputElement>('tiles-range');
   tilesRange.max = String(MAX_TILES);
@@ -929,12 +937,14 @@ function bindShare(): void {
       }
       const scale = printScale(state.size, printMm);
       const terrain = printLayers(printMm);
-      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm }, terrain.roads);
+      const tris = buildPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, water: terrain.water }, terrain.roads);
       const brokenBuildings = tris.skipped;
       // the title in raised letters on a strip in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
-      const stl = toBinaryStl(tris, `${name}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`);
-      saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${printMm / 10}cm.stl`));
+      const about = `${name}, ${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`;
+      const stl = terrain.colour ? await to3mf(tris, name, about) : toBinaryStl(tris, about);
+      if (terrain.colour) saveBlob(new Blob([stl], { type: 'model/3mf' }), exportFileName(name, state.size, `${printMm / 10}cm.3mf`));
+      else saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${printMm / 10}cm.stl`));
       const mb = num(stl.byteLength / 1048576, stl.byteLength < 10485760 ? 1 : 0);
       const depth = label ? Math.round(label.depthMm) : 0;
       const cm = num(printMm / 10);
@@ -957,19 +967,23 @@ function bindShare(): void {
     const totalMm = printMm * n;
     const scale = printScale(state.size, totalMm);
     const terrain = printLayers(totalMm);
-    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, tiles: n }, terrain.roads);
+    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, water: terrain.water, tiles: n }, terrain.roads);
     const raisedInstead = tiles.some((tile) => tile.tris.roadsRaisedInstead);
-    const files: ZipEntry[] = tiles.map((t) => ({
-      name: `tile-${t.name}.stl`,
-      data: new Uint8Array(toBinaryStl(t.tris, `${name}, tile ${t.name} of ${n}x${n}, ${scale}`)),
-    }));
+    const ext = terrain.colour ? '3mf' : 'stl';
+    /** One piece of the ZIP: an STL, or a colour 3MF (already compressed, so stored as it is). */
+    const piece = async (tris: Triangles, title: string, about: string) =>
+      terrain.colour ? await to3mf(tris, title, about) : new Uint8Array(toBinaryStl(tris, about));
+    const files: ZipEntry[] = [];
+    for (const tile of tiles) {
+      files.push({ name: `tile-${tile.name}.${ext}`, data: await piece(tile.tris, `${name} ${tile.name}`, `${name}, tile ${tile.name} of ${n}x${n}, ${scale}`) });
+    }
     // the most a building was left out in any one tile (one building can be cut into several)
     const broken = Math.max(0, ...tiles.map((t) => t.tris.skipped));
     let label: ReturnType<typeof addLabel> = null;
     if ($<HTMLInputElement>('print-ledge').checked) {
       const ledge = new Triangles();
       label = addLabel(ledge, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM);
-      if (label) files.push({ name: 'title.stl', data: new Uint8Array(toBinaryStl(ledge, `${name}, title strip`)) });
+      if (label) files.push({ name: `title.${ext}`, data: await piece(ledge, name, `${name}, title strip`) });
     }
     const last = tileName(n - 1, n - 1);
     const readme = [
@@ -978,10 +992,11 @@ function bindShare(): void {
       '',
       t.readmeGrid,
       t.readmeCorners(last),
-      label ? t.readmeStrip : '',
+      label ? t.readmeStrip(`title.${ext}`) : '',
       terrain.done.water ? t.readmeWater(num(WATER_DEPTH_MM)) : '',
       terrain.done.green ? t.readmeGreen(num(GREEN_RAISE_MM, 1)) : '',
       !terrain.done.roads ? '' : terrain.sinkRoadsMm && !raisedInstead ? t.readmeRoadsSunk(num(ROAD_SINK_MM, 1)) : t.readmeRoads(num(ROAD_RAISE_MM, 1)),
+      terrain.colour ? t.readmeColour : '',
       '',
       t.readmeCredit,
     ].filter((l, i, a) => l || a[i - 1]).join('\n');

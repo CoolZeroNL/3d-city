@@ -10,6 +10,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { inflateRawSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -460,6 +461,42 @@ try {
     `sunken roads add ${sunk.count - bare.count} triangles and keep the square and its base (${sunk.size.map((v) => v.toFixed(2)).join(' × ')} mm, “${sunkMsg.trim()}”)`,
   );
   expect(openEdges(sunk) === 0, `the print with sunken roads is closed (${openEdges(sunk)} open edges)`);
+  // the same in colour: a 3MF whose triangles carry the filament for buildings, roads and water
+  await page.check('#print-colour');
+  expect((await page.textContent('#stl-btn')).includes('3MF') && (await page.isVisible('#colour-note')), 'the colour tick turns the button into a 3MF download and shows the filaments');
+  await page.locator('#colour-note').scrollIntoViewIfNeeded();
+  await shot(page, '06j-colour-option');
+  {
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#stl-btn')]);
+    const path = join(out, '06j-colour.3mf');
+    await dl.saveAs(path);
+    const zip = readFileSync(path);
+    const files = new Map();
+    for (let p = 0; zip.readUInt32LE(p) === 0x04034b50; ) {
+      const size = zip.readUInt32LE(p + 18);
+      const nameLen = zip.readUInt16LE(p + 26);
+      const body = zip.subarray(p + 30 + nameLen, p + 30 + nameLen + size);
+      files.set(zip.toString('utf8', p + 30, p + 30 + nameLen), zip.readUInt16LE(p + 8) === 8 ? inflateRawSync(body) : body);
+      p += 30 + nameLen + size;
+    }
+    const model = files.get('3D/3dmodel.model')?.toString('utf8') ?? '';
+    const paints = {};
+    for (const m of model.matchAll(/paint_color="([0-9A-F]+)"/g)) paints[m[1]] = (paints[m[1]] ?? 0) + 1;
+    const tris = [...model.matchAll(/<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"/g)].map((m) => [m[1], m[2], m[3]]);
+    const seen = new Map();
+    for (const v of tris) for (let e = 0; e < 3; e++) seen.set(`${v[e]}>${v[(e + 1) % 3]}`, (seen.get(`${v[e]}>${v[(e + 1) % 3]}`) ?? 0) + 1);
+    let open = 0;
+    for (const [d, n] of seen) {
+      const [a, b] = d.split('>');
+      if (n !== 1 || seen.get(`${b}>${a}`) !== 1) open++;
+    }
+    expect(
+      /-10cm\.3mf$/.test(dl.suggestedFilename()) && files.has('[Content_Types].xml') && paints['8'] > 1000 && paints['0C'] > 1000 && paints['1C'] > 100 && open === 0,
+      `colour 3MF saved (${dl.suggestedFilename()}, ${(zip.length / 1048576).toFixed(1)} MB, ${tris.length} triangles: ${paints['8']} buildings, ${paints['0C']} roads, ${paints['1C']} water, ${open} open edges)`,
+    );
+    expect(/In colour: filament 1 ground, 2 buildings and title, 3 roads, 4 water\./.test(await page.textContent('#share-msg')), 'the dialog lists the filaments');
+  }
+  await page.uncheck('#print-colour');
   await page.click('#print-roads-group [data-value="level"]');
   await page.uncheck('#print-green');
   await page.check('#print-ledge');
