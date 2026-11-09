@@ -13,8 +13,11 @@ export const PAINT = { ground: 0, buildings: 1, roads: 2, water: 3, green: 4 } a
 /** Filament per part (indexed by PAINT): the ground is always 1; 1 for another part means "like the ground". */
 export type Filaments = readonly number[];
 
-/** Ground 1, buildings and the title 2, roads 3, water 4, parks and woods 5. */
-export const DEFAULT_FILAMENTS: Filaments = [1, 2, 3, 4, 5];
+/**
+ * Ground 1, buildings and the title 2, roads 3, water 4, and parks and woods like the ground: four
+ * filaments, as an AMS or AMS Lite holds. Parks get their own filament when someone picks one.
+ */
+export const DEFAULT_FILAMENTS: Filaments = [1, 2, 3, 4, 1];
 
 /** How many filaments a part can be given. */
 export const MAX_FILAMENTS = 5;

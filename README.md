@@ -29,8 +29,8 @@ works on your phone.**
   print bed. For painting, water sits 1 mm below the land, parks and woods (0.6 mm) can stand above it,
   and roads can stand 0.4 mm above it or be cut 0.6 mm into it. Every exported shell is checked to be
   watertight. For multi-material printers, save it in colour instead: a 3MF already painted, by default
-  1 ground, 2 buildings and title, 3 roads, 4 water, 5 parks and woods; each part's filament can be
-  changed, and level roads are painted flush.
+  1 ground, 2 buildings and title, 3 roads, 4 water; parks and woods are a part of their own, and each
+  part's filament can be changed (1 to 5). Level roads are painted flush.
 - **Go bigger, square by square:** "Make a bigger map from several squares" fixes the area, print
   size and terrain, and an arrow pad loads the square next door. Every square's print measures from
   one shared base, so the pieces meet exactly at the edges; "Download the whole map" saves 2 × 2 or

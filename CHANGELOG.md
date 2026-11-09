@@ -2,7 +2,7 @@
 
 ## 1.7.6 — 2026-11-09
 
-- A fifth colour for parks and woods in the colour file, and a filament picker for each part: buildings and the title, roads, water, and parks and woods can each go on any filament from 1 to 5. Put the parks on 4 where there's no water, give roads and parks the same filament, or put a part on 1 to print it like the ground. The default is 1 ground, 2 buildings and title, 3 roads, 4 water, 5 parks and woods; the choice is remembered on that device. Parks and woods are painted whether or not they're raised. Suggested on Reddit.
+- Parks and woods as their own part of the colour file, and a filament picker for each part: buildings and the title, roads, water, and parks and woods can each go on any filament from 1 to 5. Put the forests on 4 where there's no water, give roads and forests the same filament, or put a part on 1 to print it like the ground. By default parks and woods print like the ground, so four filaments, as an AMS or AMS Lite holds, are still enough; the choice is remembered on that device. Parks and woods are painted whether or not they're raised. Suggested on Reddit.
 
 ## 1.7.5 — 2026-11-09
 

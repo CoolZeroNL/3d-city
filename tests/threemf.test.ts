@@ -187,7 +187,7 @@ describe('the colour print file (3MF)', () => {
     for (const [x, y] of [[100, -10], [-10, 60], [-10, -8], [37, -4.5], [-120, 60]]) expect(height(m, mm(x), mm(y))).toBeCloseTo(height(p, mm(x), mm(y)), 2);
   });
 
-  it('paints parks and woods in the fifth filament, or any other chosen per part', () => {
+  it('paints parks and woods like the ground by default, or in any filament chosen per part', () => {
     const { grid, water } = riverTown();
     // a park in the north-west, away from the river and the roads
     const green = new Uint8Array(grid.n * grid.n);
@@ -199,7 +199,8 @@ describe('the colour print file (3MF)', () => {
     }
     const t = buildPrint(grid, buildings, { sideMm: 100, baseMm: 3, exaggeration: 1, water, green, paintRoads: true }, roads);
     const park: [number, number] = [mm(-140), mm(140)];
-    const standard = parse(modelXml(t, 'Test', 'a test'));
+    expect(filamentAt(parse(modelXml(t, 'Test', 'a test')), ...park)).toBe(1); // four filaments by default
+    const standard = parse(modelXml(t, 'Test', 'a test', [1, 2, 3, 4, 5]));
     expect(closedByIndex(standard)).toBe(true);
     expect(filamentAt(standard, ...park)).toBe(5);
     expect(filamentAt(standard, mm(80), mm(-180))).toBe(4); // the river
