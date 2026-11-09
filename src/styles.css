@@ -1349,11 +1349,46 @@ input[type='range'] {
   font-size: 13px;
 }
 
-.colour-note {
-  margin: -4px 0 0 26px;
+.colour-plan {
+  display: grid;
+  gap: 6px;
+  max-width: 300px;
+  margin: -2px 0 0 26px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.colour-plan[hidden] {
+  display: none;
+}
+
+.colour-plan legend {
+  padding: 0;
+  margin-bottom: 6px;
   font-size: 13px;
   color: var(--muted);
 }
+
+.colour-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.colour-row select {
+  min-width: 52px;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-sunk);
+  color: inherit;
+  font: inherit;
+}
+
 
 .paint-set legend {
   padding: 0;

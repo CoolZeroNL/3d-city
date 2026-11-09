@@ -10,6 +10,7 @@ import { BUILDING_COLOURS, HEIGHT_RAMP } from './scene/buildingsMesh';
 import { isWebGL2Available, Viewer } from './scene/viewer';
 import { clampSize, decodeState, encodeState, samePlace, type AreaSize, type BuildingStyle, type Layers, type ViewState } from './state';
 import { buildPrint, PRINT_BASE_MM, printScale, toBinaryStl, Triangles } from './export/stl';
+import { DEFAULT_FILAMENTS, PAINT, type Filaments } from './export/paint';
 import { to3mf } from './export/threemf';
 import { buildTiledPrint, MAX_TILES, tileName } from './export/tiles';
 import { makeZip, type ZipEntry } from './export/zip';
@@ -844,7 +845,40 @@ function bindShare(): void {
     $('print-note').textContent = printTiles > 1 ? t.tilesNote(num(printTiles * printTiles), total, note) : note;
     const colour = $<HTMLInputElement>('print-colour').checked;
     $('stl-btn').textContent = printTiles > 1 ? (colour ? t.colourTilesButton : t.stlTilesButton) : colour ? t.colourButton : t.stlButton;
-    $('colour-note').hidden = !colour;
+    $('colour-plan').hidden = !colour;
+  };
+  // the filament for each part of the colour file, remembered on this device
+  const filamentSelects: Array<[number, HTMLSelectElement]> = [
+    [PAINT.buildings, $<HTMLSelectElement>('fil-buildings')],
+    [PAINT.roads, $<HTMLSelectElement>('fil-roads')],
+    [PAINT.water, $<HTMLSelectElement>('fil-water')],
+    [PAINT.green, $<HTMLSelectElement>('fil-green')],
+  ];
+  try {
+    const saved = JSON.parse(localStorage.getItem('yp-filaments') ?? 'null');
+    if (Array.isArray(saved)) for (const [part, el] of filamentSelects) if (saved[part] >= 1 && saved[part] <= 5) el.value = String(saved[part]);
+  } catch {
+    /* no storage: the defaults */
+  }
+  const filaments = (): Filaments => {
+    const f = [...DEFAULT_FILAMENTS];
+    for (const [part, el] of filamentSelects) f[part] = Number(el.value) || DEFAULT_FILAMENTS[part];
+    return f;
+  };
+  for (const [, el] of filamentSelects) {
+    el.addEventListener('change', () => {
+      try {
+        localStorage.setItem('yp-filaments', JSON.stringify(filaments()));
+      } catch {
+        /* not remembered, still used */
+      }
+    });
+  }
+  /** "1 ground, 2 buildings and title, 3 roads + parks and woods, 4 water": the filaments in use, in order. */
+  const filamentPlan = (f: Filaments): string => {
+    const names = [t.colourParts.ground, t.colourParts.buildings, t.colourParts.roads, t.colourParts.water, t.colourParts.green];
+    const used = [...new Set(f)].sort((a, b) => a - b);
+    return used.map((n) => `${n} ${names.filter((_, part) => f[part] === n).join(' + ')}`).join(', ');
   };
   $('print-colour').addEventListener('change', () => updatePrintNote());
   // roads in the print: level with the ground, raised, or cut into it
@@ -970,7 +1004,7 @@ function bindShare(): void {
           const tris = buildPrint(
             terrain.grid,
             m.printBuildings(s.ref),
-            { sideMm: s.mm, baseMm: PRINT_BASE_MM, exaggeration: s.ex, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water },
+            { sideMm: s.mm, baseMm: PRINT_BASE_MM, exaggeration: s.ex, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water, green: terrain.green },
             terrain.roads,
           );
           done.water ||= terrain.done.water;
@@ -982,7 +1016,7 @@ function bindShare(): void {
           done.colour = terrain.colour;
           const label = squareLabel(sq.i, sq.j);
           const about = `${name}, square ${label}, ${scale}`;
-          const data = terrain.colour ? await to3mf(tris, `${name} ${label}`, about) : new Uint8Array(toBinaryStl(tris, about));
+          const data = terrain.colour ? await to3mf(tris, `${name} ${label}`, about, filaments()) : new Uint8Array(toBinaryStl(tris, about));
           files.push({ name: `square-${label.replace(' ', '-')}.${terrain.colour ? '3mf' : 'stl'}`, data });
           bytes += data.byteLength;
         } finally {
@@ -1008,7 +1042,7 @@ function bindShare(): void {
         done.water ? t.readmeWater(num(WATER_DEPTH_MM)) : '',
         done.green ? t.readmeGreen(num(GREEN_RAISE_MM, 1)) : '',
         !done.roads ? '' : done.raisedInstead || (!done.sunk && !done.painted) ? t.readmeRoads(num(ROAD_RAISE_MM, 1)) : done.sunk ? t.readmeRoadsSunk(num(ROAD_SINK_MM, 1)) : t.readmeRoadsPainted,
-        done.colour ? t.readmeColour : '',
+        done.colour ? t.readmeColour(filamentPlan(filaments())) : '',
         '',
         t.readmeCredit,
       ].filter((l, i, a) => l || a[i - 1]).join('\n');
@@ -1048,8 +1082,10 @@ function bindShare(): void {
       grid = sinkWater(grid, water, metres(WATER_DEPTH_MM));
       done.water = true;
     }
-    const green = $<HTMLInputElement>('print-green').checked ? m.printGreen() : null;
-    if (green) {
+    // likewise the parks and woods: painted in colour even where they aren't raised
+    const raise = $<HTMLInputElement>('print-green').checked;
+    const green = raise || colour ? m.printGreen() : null;
+    if (green && raise) {
       grid = shiftMasked(grid, green, metres(GREEN_RAISE_MM));
       done.green = true;
     }
@@ -1064,10 +1100,10 @@ function bindShare(): void {
         done.water ? t.waterSunk(num(WATER_DEPTH_MM)) : '',
         done.green ? t.greenRaised(num(GREEN_RAISE_MM, 1)) : '',
         !done.roads ? '' : raisedInstead ? t.roadsRaisedInstead(num(ROAD_RAISE_MM, 1)) : sinkRoadsMm ? t.roadsSunk(num(ROAD_SINK_MM, 1)) : paintRoads ? t.roadsPainted : t.roadsRaised(num(ROAD_RAISE_MM, 1)),
-        colour ? t.colourSaved : '',
+        colour ? t.colourSaved(filamentPlan(filaments())) : '',
         series && m.grid.min < series.ref ? t.seriesClamped : '',
       ].join('');
-    return { grid, roads, done, sinkRoadsMm, paintRoads, note, colour, water: colour && water ? water : undefined };
+    return { grid, roads, done, sinkRoadsMm, paintRoads, note, colour, water: colour && water ? water : undefined, green: colour && green ? green : undefined };
   };
   const tilesRange = $<HTMLInputElement>('tiles-range');
   tilesRange.max = String(MAX_TILES);
@@ -1160,12 +1196,12 @@ function bindShare(): void {
       }
       const scale = printScale(state.size, printMm);
       const terrain = printLayers(printMm);
-      const tris = buildPrint(terrain.grid, model.printBuildings(state.series?.ref), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water }, terrain.roads);
+      const tris = buildPrint(terrain.grid, model.printBuildings(state.series?.ref), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water, green: terrain.green }, terrain.roads);
       const brokenBuildings = tris.skipped;
       // the title in raised letters on a strip in front of the model
       const label = $<HTMLInputElement>('print-ledge').checked ? addLabel(tris, await loadGlyphs(), [name, subtitle()], printMm, PRINT_BASE_MM) : null;
       const about = `${name}, ${seriesHeader()}${state.size / 1000} km, ${scale}, terrain x${state.exaggeration.toFixed(1)}`;
-      const stl = terrain.colour ? await to3mf(tris, name, about) : toBinaryStl(tris, about);
+      const stl = terrain.colour ? await to3mf(tris, name, about, filaments()) : toBinaryStl(tris, about);
       if (terrain.colour) saveBlob(new Blob([stl], { type: 'model/3mf' }), exportFileName(name, state.size, `${seriesPart()}${printMm / 10}cm.3mf`));
       else saveBlob(new Blob([stl], { type: 'model/stl' }), exportFileName(name, state.size, `${seriesPart()}${printMm / 10}cm.stl`));
       const mb = num(stl.byteLength / 1048576, stl.byteLength < 10485760 ? 1 : 0);
@@ -1190,12 +1226,12 @@ function bindShare(): void {
     const totalMm = printMm * n;
     const scale = printScale(state.size, totalMm);
     const terrain = printLayers(totalMm);
-    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(state.series?.ref), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water, tiles: n }, terrain.roads);
+    const tiles = buildTiledPrint(terrain.grid, model.printBuildings(state.series?.ref), { sideMm: printMm, baseMm: PRINT_BASE_MM, exaggeration: state.exaggeration, sinkRoadsMm: terrain.sinkRoadsMm, paintRoads: terrain.paintRoads, water: terrain.water, green: terrain.green, tiles: n }, terrain.roads);
     const raisedInstead = tiles.some((tile) => tile.tris.roadsRaisedInstead);
     const ext = terrain.colour ? '3mf' : 'stl';
     /** One piece of the ZIP: an STL, or a colour 3MF (already compressed, so stored as it is). */
     const piece = async (tris: Triangles, title: string, about: string) =>
-      terrain.colour ? await to3mf(tris, title, about) : new Uint8Array(toBinaryStl(tris, about));
+      terrain.colour ? await to3mf(tris, title, about, filaments()) : new Uint8Array(toBinaryStl(tris, about));
     const files: ZipEntry[] = [];
     for (const tile of tiles) {
       files.push({ name: `tile-${tile.name}.${ext}`, data: await piece(tile.tris, `${name} ${tile.name}`, `${name}, ${seriesHeader()}tile ${tile.name} of ${n}x${n}, ${scale}`) });
@@ -1220,7 +1256,7 @@ function bindShare(): void {
       terrain.done.water ? t.readmeWater(num(WATER_DEPTH_MM)) : '',
       terrain.done.green ? t.readmeGreen(num(GREEN_RAISE_MM, 1)) : '',
       !terrain.done.roads ? '' : raisedInstead ? t.readmeRoads(num(ROAD_RAISE_MM, 1)) : terrain.sinkRoadsMm ? t.readmeRoadsSunk(num(ROAD_SINK_MM, 1)) : terrain.paintRoads ? t.readmeRoadsPainted : t.readmeRoads(num(ROAD_RAISE_MM, 1)),
-      terrain.colour ? t.readmeColour : '',
+      terrain.colour ? t.readmeColour(filamentPlan(filaments())) : '',
       '',
       t.readmeCredit,
     ].filter((l, i, a) => l || a[i - 1]).join('\n');

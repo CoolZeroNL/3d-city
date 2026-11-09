@@ -5,10 +5,11 @@
  * It is one object, so slicers union its shells exactly as they do the STL's. Painted triangles
  * carry the slicers' own multi-material painting: `paint_color` for Bambu Studio and OrcaSlicer,
  * `slic3rpe:mmu_segmentation` for PrusaSlicer, the same code in both (see paintCode). Triangles
- * left unpainted, the ground, take the object's filament, 1.
+ * left unpainted, the ground, take the object's filament, 1. Each part's filament is chosen in the
+ * share menu (see paint.ts).
  */
 
-import { paintCode } from './paint';
+import { DEFAULT_FILAMENTS, paintCode, type Filaments } from './paint';
 import type { Triangles } from './stl';
 import { deflateRaw, makeZip } from './zip';
 
@@ -21,7 +22,7 @@ const num = (v: number) => String(Math.round(v * 1e5) / 1e5);
  * The 3MF model XML. Points shared by triangles are written once (by their exact STL value), so
  * each shell stays closed by its indices; a triangle whose corners fall on one point is left out.
  */
-export function modelXml(t: Triangles, title: string, description: string): string {
+export function modelXml(t: Triangles, title: string, description: string, filaments: Filaments = DEFAULT_FILAMENTS): string {
   const index = new Map<string, number>();
   const vertices: string[] = [];
   const triangles: string[] = [];
@@ -40,9 +41,9 @@ export function modelXml(t: Triangles, title: string, description: string): stri
       return i;
     });
     if (v[0] === v[1] || v[1] === v[2] || v[0] === v[2]) continue;
-    const f = t.paint[k];
+    const f = filaments[t.paint[k]] ?? 1;
     let paint = '';
-    if (f) {
+    if (f > 1) {
       let code = codes.get(f);
       if (!code) codes.set(f, (code = paintCode(f)));
       paint = ` paint_color="${code}" slic3rpe:mmu_segmentation="${code}"`;
@@ -90,9 +91,9 @@ const RELS = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 /** The 3MF file's bytes: the model compressed where the browser can, stored otherwise. */
-export async function to3mf(t: Triangles, title: string, description: string): Promise<Uint8Array<ArrayBuffer>> {
+export async function to3mf(t: Triangles, title: string, description: string, filaments: Filaments = DEFAULT_FILAMENTS): Promise<Uint8Array<ArrayBuffer>> {
   const enc = new TextEncoder();
-  const model = enc.encode(modelXml(t, title, description));
+  const model = enc.encode(modelXml(t, title, description, filaments));
   return makeZip([
     { name: '[Content_Types].xml', data: enc.encode(CONTENT_TYPES) },
     { name: '_rels/.rels', data: enc.encode(RELS) },

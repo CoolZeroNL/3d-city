@@ -17,7 +17,7 @@ import earcut, { deviation } from 'earcut';
 import polygonClipping from 'polygon-clipping';
 import { signedArea, type Polygon } from '../geo/polygon';
 import type { HeightGrid } from '../geo/terrain';
-import { PAINT, wet } from './paint';
+import { groundPart, PAINT } from './paint';
 import { addRoads, BURY_MM, type PrintRoad } from './roads';
 import { addCarvedTerrainBlock } from './sunkenRoads';
 
@@ -53,6 +53,8 @@ export interface PrintOptions {
    * for the colour file: the ground's triangles over water get the water's filament.
    */
   water?: ArrayLike<number>;
+  /** Parks and woods at each grid point (as `water`): their ground triangles get the parks' filament. */
+  green?: ArrayLike<number>;
 }
 
 
@@ -71,9 +73,9 @@ export class Triangles {
   skipped = 0;
   /** the roads were to be sunk but couldn't be cut in, so they were raised instead */
   roadsRaisedInstead = false;
-  /** each triangle's filament for the colour file (0: not painted, the ground's) */
+  /** each triangle's part of the print, for the colour file (PAINT: 0 the ground) */
   paint = new Uint8Array(4096);
-  /** the filament the next triangles are painted with */
+  /** the part the next triangles belong to */
   colour = 0;
 
   /** Add a triangle, flipped if needed so its normal points along `out`. */
@@ -126,7 +128,7 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
   let cut = roads.length > 0 && (sink > 0 || !!opts.paintRoads);
   if (cut) {
     try {
-      addCarvedTerrainBlock(t, grid, roads, { s, exaggeration: opts.exaggeration, base, depthMm: sink, water: opts.water });
+      addCarvedTerrainBlock(t, grid, roads, { s, exaggeration: opts.exaggeration, base, depthMm: sink, water: opts.water, green: opts.green });
     } catch (err) {
       // never seen, but a print with raised roads beats no print
       console.warn('cutting the roads in failed, raising them instead', err);
@@ -135,7 +137,7 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
       cut = false;
     }
   }
-  if (!cut) addTerrainBlock(t, grid, opts.exaggeration, s, base, opts.water);
+  if (!cut) addTerrainBlock(t, grid, opts.exaggeration, s, base, opts.water, opts.green);
   t.colour = PAINT.buildings;
   // building columns start halfway into the base: always inside the block
   const bottom = base / 2;
@@ -155,7 +157,7 @@ export function buildPrint(grid: HeightGrid, buildings: PrintBuilding[], opts: P
   return t;
 }
 
-function addTerrainBlock(t: Triangles, grid: HeightGrid, ex: number, s: number, base: number, water?: ArrayLike<number>): void {
+function addTerrainBlock(t: Triangles, grid: HeightGrid, ex: number, s: number, base: number, water?: ArrayLike<number>, green?: ArrayLike<number>): void {
   const { n, sizeM, elev, min } = grid;
   const h = sizeM / 2;
   const step = sizeM / (n - 1);
@@ -170,9 +172,9 @@ function addTerrainBlock(t: Triangles, grid: HeightGrid, ex: number, s: number, 
       const c = top(i, j + 1);
       const d = top(i + 1, j + 1);
       const [ka, kb, kc, kd] = [j * n + i, j * n + i + 1, (j + 1) * n + i, (j + 1) * n + i + 1];
-      t.colour = wet(water, ka, kb, kd) ? PAINT.water : PAINT.ground;
+      t.colour = groundPart(water, green, ka, kb, kd);
       t.add(a, b, d, UP);
-      t.colour = wet(water, ka, kd, kc) ? PAINT.water : PAINT.ground;
+      t.colour = groundPart(water, green, ka, kd, kc);
       t.add(a, d, c, UP);
     }
   }

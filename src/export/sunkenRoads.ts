@@ -22,7 +22,7 @@
 
 import earcut, { deviation } from 'earcut';
 import type { HeightGrid } from '../geo/terrain';
-import { PAINT, wet } from './paint';
+import { groundPart, PAINT } from './paint';
 import { ROAD_MIN_MM, ROAD_SKIP_MM, surfaceMm, type PrintRoad } from './roads';
 import type { Triangles } from './stl';
 
@@ -59,8 +59,9 @@ export interface CarveOptions {
   base: number;
   /** how deep roads are cut (mm) */
   depthMm: number;
-  /** water at each grid point, for the colour file (see PrintOptions.water) */
+  /** water, and parks and woods, at each grid point, for the colour file (see PrintOptions) */
   water?: ArrayLike<number>;
+  green?: ArrayLike<number>;
 }
 
 const UP: V = [0, 0, 1];
@@ -157,7 +158,7 @@ export function addCarvedTerrainBlock(t: Triangles, grid: HeightGrid, roads: Pri
     t.add(low(p), low(q), top(q), out);
     t.add(low(p), top(q), top(p), out);
   };
-  const water = opts.water;
+  const { water, green } = opts;
 
   // --- the top, cell by cell
   for (let j = 0; j < n - 1; j++) {
@@ -171,14 +172,15 @@ export function addCarvedTerrainBlock(t: Triangles, grid: HeightGrid, roads: Pri
       const g = [j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i];
       if (!mixed) {
         const lift = first ? low : top;
-        t.colour = first ? PAINT.roads : wet(water, g[0], g[1], g[2]) ? PAINT.water : PAINT.ground;
+        t.colour = first ? PAINT.roads : groundPart(water, green, g[0], g[1], g[2]);
         t.add(lift(c[0]), lift(c[1]), lift(c[2]), UP);
-        t.colour = first ? PAINT.roads : wet(water, g[0], g[2], g[3]) ? PAINT.water : PAINT.ground;
+        t.colour = first ? PAINT.roads : groundPart(water, green, g[0], g[2], g[3]);
         t.add(lift(c[0]), lift(c[2]), lift(c[3]), UP);
         continue;
       }
-      // the land in a cut cell: water when two of its four corners are
-      const land = wet(water, g[0], g[1], g[2]) || wet(water, g[0], g[2], g[3]) ? PAINT.water : PAINT.ground;
+      // the land in a cut cell: water, or parks and woods, when either of its triangles is
+      const halves = [groundPart(water, green, g[0], g[1], g[2]), groundPart(water, green, g[0], g[2], g[3])];
+      const land = halves.includes(PAINT.water) ? PAINT.water : halves.includes(PAINT.green) ? PAINT.green : PAINT.ground;
       carveCell(t, cellEdges(I0, J0), c, first, top, low, wall, land);
     }
   }

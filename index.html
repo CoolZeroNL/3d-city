@@ -266,7 +266,13 @@
               <label class="check"><input type="checkbox" id="print-green" /> <span data-t="raiseGreen">Raise parks and woods 0.6 mm</span></label>
             </fieldset>
             <label class="check"><input type="checkbox" id="print-colour" /> <span data-t="colourFile">In colour: a 3MF for AMS and MMU printers</span></label>
-            <small class="colour-note" id="colour-note" data-t="colourSlots" hidden>Filament 1 ground, 2 buildings, 3 roads, 4 water</small>
+            <fieldset class="colour-plan" id="colour-plan" hidden>
+              <legend data-t="colourPlan">Filament for each part (1 is the ground’s)</legend>
+              <label class="colour-row"><span data-t="filBuildings">Buildings and title</span> <select id="fil-buildings"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+              <label class="colour-row"><span data-t="filRoads">Roads</span> <select id="fil-roads"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option></select></label>
+              <label class="colour-row"><span data-t="filWater">Water</span> <select id="fil-water"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
+              <label class="colour-row"><span data-t="filGreen">Parks and woods</span> <select id="fil-green"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5" selected>5</option></select></label>
+            </fieldset>
             <details class="series" id="series">
               <summary data-t="seriesMore">Want to print more of the area?</summary>
               <p class="series-intro" id="series-intro" data-t="seriesIntro">Print this square, then the squares next to it: they fit together at the edges.</p>

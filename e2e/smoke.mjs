@@ -463,8 +463,8 @@ try {
   expect(openEdges(sunk) === 0, `the print with sunken roads is closed (${openEdges(sunk)} open edges)`);
   // the same in colour: a 3MF whose triangles carry the filament for buildings, roads and water
   await page.check('#print-colour');
-  expect((await page.textContent('#stl-btn')).includes('3MF') && (await page.isVisible('#colour-note')), 'the colour tick turns the button into a 3MF download and shows the filaments');
-  await page.locator('#colour-note').scrollIntoViewIfNeeded();
+  expect((await page.textContent('#stl-btn')).includes('3MF') && (await page.isVisible('#colour-plan')), 'the colour tick turns the button into a 3MF download and shows a filament for each part');
+  await page.locator('#colour-plan').scrollIntoViewIfNeeded();
   await shot(page, '06j-colour-option');
   /** The colour file: its paint codes by count, triangles and open edges (0 when every shell is closed). */
   const colourFile = async (name) => {
@@ -496,10 +496,18 @@ try {
   {
     const c = await colourFile('06j-colour.3mf');
     expect(
-      /-10cm\.3mf$/.test(c.dl.suggestedFilename()) && c.files.has('[Content_Types].xml') && c.paints['8'] > 1000 && c.paints['0C'] > 1000 && c.paints['1C'] > 100 && c.open === 0,
-      `colour 3MF saved (${c.dl.suggestedFilename()}, ${(c.zip.length / 1048576).toFixed(1)} MB, ${c.tris} triangles: ${c.paints['8']} buildings, ${c.paints['0C']} roads, ${c.paints['1C']} water, ${c.open} open edges)`,
+      /-10cm\.3mf$/.test(c.dl.suggestedFilename()) && c.files.has('[Content_Types].xml') && c.paints['8'] > 1000 && c.paints['0C'] > 1000 && c.paints['1C'] > 100 && c.paints['2C'] > 10 && c.open === 0,
+      `colour 3MF saved (${c.dl.suggestedFilename()}, ${(c.zip.length / 1048576).toFixed(1)} MB, ${c.tris} triangles: ${c.paints['8']} buildings, ${c.paints['0C']} roads, ${c.paints['1C']} water, ${c.paints['2C']} parks and woods, ${c.open} open edges)`,
     );
-    expect(/In colour: filament 1 ground, 2 buildings and title, 3 roads, 4 water\./.test(await page.textContent('#share-msg')), 'the dialog lists the filaments');
+    expect(/In colour: filament 1 ground, 2 buildings and title, 3 roads, 4 water, 5 parks and woods\./.test(await page.textContent('#share-msg')), 'the dialog lists the filaments');
+    // parks on the water's filament: four filaments again
+    await page.selectOption('#fil-green', '4');
+    const four = await colourFile('06j-colour-parks-on-4.3mf');
+    expect(
+      !four.paints['2C'] && four.paints['1C'] > c.paints['1C'] && four.open === 0 && /filament 1 ground, 2 buildings and title, 3 roads, 4 water \+ parks and woods\./.test(await page.textContent('#share-msg')),
+      `parks can share a filament with the water (${four.paints['1C']} triangles on filament 4, none on 5)`,
+    );
+    await page.selectOption('#fil-green', '5');
     // level roads in colour: painted flush with the ground
     await page.click('#print-roads-group [data-value="level"]');
     const level = await colourFile('06k-colour-level-roads.3mf');

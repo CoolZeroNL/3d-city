@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.6 — 2026-11-09
+
+- A fifth colour for parks and woods in the colour file, and a filament picker for each part: buildings and the title, roads, water, and parks and woods can each go on any filament from 1 to 5. Put the parks on 4 where there's no water, give roads and parks the same filament, or put a part on 1 to print it like the ground. The default is 1 ground, 2 buildings and title, 3 roads, 4 water, 5 parks and woods; the choice is remembered on that device. Parks and woods are painted whether or not they're raised. Suggested on Reddit.
+
 ## 1.7.5 — 2026-11-09
 
 - A bigger map, square by square: "Make a bigger map from several squares" in the share menu fixes the area, the print size and the terrain, and an arrow pad loads the square next door; the link remembers the map and the square. Every square's print measures its heights from one shared base, so neighbouring pieces meet exactly at the edges (ground that dips below that base is flattened onto it, and the dialog says so). "Download the whole map" saves 2 × 2 or 3 × 3 squares in one ZIP with a note on how they fit, as STL or in colour. Asked for on Reddit.

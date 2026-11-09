@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fontData from '../src/export/glyphs/inter-bold.json';
 import { addLabel, type GlyphFont } from '../src/export/label';
-import { PAINT, paintCode } from '../src/export/paint';
+import { DEFAULT_FILAMENTS, PAINT, paintCode } from '../src/export/paint';
 import type { PrintRoad } from '../src/export/roads';
 import { buildPrint, Triangles } from '../src/export/stl';
 import { modelXml, to3mf } from '../src/export/threemf';
@@ -127,9 +127,9 @@ describe('the colour print file (3MF)', () => {
     const m = parse(modelXml(t, 'Test & "town"', 'a test'));
     expect(m.triangles.length).toBe(t.count);
     expect(closedByIndex(m)).toBe(true);
-    expect(filamentAt(m, mm(60), mm(60))).toBe(PAINT.buildings); // a roof
-    expect(filamentAt(m, mm(100), mm(-10))).toBe(PAINT.roads); // the east-west road
-    expect(filamentAt(m, mm(80), mm(-180))).toBe(PAINT.water); // the river
+    expect(filamentAt(m, mm(60), mm(60))).toBe(DEFAULT_FILAMENTS[PAINT.buildings]); // a roof
+    expect(filamentAt(m, mm(100), mm(-10))).toBe(DEFAULT_FILAMENTS[PAINT.roads]); // the east-west road
+    expect(filamentAt(m, mm(80), mm(-180))).toBe(DEFAULT_FILAMENTS[PAINT.water]); // the river
     expect(filamentAt(m, mm(-120), mm(-60))).toBe(1); // plain ground
     // both slicers' attributes, always the same code
     for (const tri of m.triangles) expect(tri.prusa).toBe(tri.paint);
@@ -152,9 +152,9 @@ describe('the colour print file (3MF)', () => {
     expect(t.roadsRaisedInstead).toBe(false);
     const m = parse(modelXml(t, 'Test', 'a test'));
     expect(closedByIndex(m)).toBe(true);
-    expect(filamentAt(m, mm(100), mm(-10))).toBe(PAINT.roads);
-    expect(filamentAt(m, mm(-10), mm(-180))).toBe(PAINT.roads); // the road through the river
-    expect(filamentAt(m, mm(80), mm(-180))).toBe(PAINT.water);
+    expect(filamentAt(m, mm(100), mm(-10))).toBe(DEFAULT_FILAMENTS[PAINT.roads]);
+    expect(filamentAt(m, mm(-10), mm(-180))).toBe(DEFAULT_FILAMENTS[PAINT.roads]); // the road through the river
+    expect(filamentAt(m, mm(80), mm(-180))).toBe(DEFAULT_FILAMENTS[PAINT.water]);
     expect(filamentAt(m, mm(-120), mm(60))).toBe(1);
   });
 
@@ -166,9 +166,9 @@ describe('the colour print file (3MF)', () => {
     const m = parse(modelXml(painted, 'Test', 'a test'));
     const p = parse(modelXml(plain, 'Test', 'a test'));
     expect(closedByIndex(m)).toBe(true);
-    expect(filamentAt(m, mm(100), mm(-10))).toBe(PAINT.roads);
-    expect(filamentAt(m, mm(-10), mm(60))).toBe(PAINT.roads);
-    expect(filamentAt(m, mm(80), mm(-180))).toBe(PAINT.water);
+    expect(filamentAt(m, mm(100), mm(-10))).toBe(DEFAULT_FILAMENTS[PAINT.roads]);
+    expect(filamentAt(m, mm(-10), mm(60))).toBe(DEFAULT_FILAMENTS[PAINT.roads]);
+    expect(filamentAt(m, mm(80), mm(-180))).toBe(DEFAULT_FILAMENTS[PAINT.water]);
     expect(filamentAt(m, mm(-120), mm(60))).toBe(1);
     // the same ground as without roads, to a few micrometres (cut faces may span a cell's diagonal)
     const height = (mesh: Mesh, x: number, y: number) => {
@@ -185,6 +185,31 @@ describe('the colour print file (3MF)', () => {
       return best;
     };
     for (const [x, y] of [[100, -10], [-10, 60], [-10, -8], [37, -4.5], [-120, 60]]) expect(height(m, mm(x), mm(y))).toBeCloseTo(height(p, mm(x), mm(y)), 2);
+  });
+
+  it('paints parks and woods in the fifth filament, or any other chosen per part', () => {
+    const { grid, water } = riverTown();
+    // a park in the north-west, away from the river and the roads
+    const green = new Uint8Array(grid.n * grid.n);
+    const step = grid.sizeM / (grid.n - 1);
+    for (let j = 0; j < grid.n; j++) for (let i = 0; i < grid.n; i++) {
+      const x = -200 + i * step;
+      const y = -200 + j * step;
+      green[j * grid.n + i] = x < -60 && y > 40 ? 1 : 0;
+    }
+    const t = buildPrint(grid, buildings, { sideMm: 100, baseMm: 3, exaggeration: 1, water, green, paintRoads: true }, roads);
+    const park: [number, number] = [mm(-140), mm(140)];
+    const standard = parse(modelXml(t, 'Test', 'a test'));
+    expect(closedByIndex(standard)).toBe(true);
+    expect(filamentAt(standard, ...park)).toBe(5);
+    expect(filamentAt(standard, mm(80), mm(-180))).toBe(4); // the river
+    // no water here? parks on 4; roads like the ground (unpainted); buildings on 3
+    const mine = parse(modelXml(t, 'Test', 'a test', [1, 3, 1, 4, 4]));
+    expect(filamentAt(mine, ...park)).toBe(4);
+    expect(filamentAt(mine, mm(80), mm(-180))).toBe(4);
+    expect(filamentAt(mine, mm(100), mm(-10))).toBe(1);
+    expect(filamentAt(mine, mm(60), mm(60))).toBe(3);
+    expect(mine.triangles.filter((x) => x.paint).length).toBeLessThan(standard.triangles.filter((x) => x.paint).length);
   });
 
   it('paints the water in every tile that has some', () => {

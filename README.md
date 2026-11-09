@@ -28,8 +28,9 @@ works on your phone.**
   (10, 15 or 20 cm wide; 2 km on 15 cm is 1:13,300), in one piece or in up to 8 × 8 tiles that fit your
   print bed. For painting, water sits 1 mm below the land, parks and woods (0.6 mm) can stand above it,
   and roads can stand 0.4 mm above it or be cut 0.6 mm into it. Every exported shell is checked to be
-  watertight. For multi-material printers, save it in colour instead: a 3MF already painted with four
-  filaments (1 ground, 2 buildings and title, 3 roads, 4 water), with level roads painted flush.
+  watertight. For multi-material printers, save it in colour instead: a 3MF already painted, by default
+  1 ground, 2 buildings and title, 3 roads, 4 water, 5 parks and woods; each part's filament can be
+  changed, and level roads are painted flush.
 - **Go bigger, square by square:** "Make a bigger map from several squares" fixes the area, print
   size and terrain, and an arrow pad loads the square next door. Every square's print measures from
   one shared base, so the pieces meet exactly at the edges; "Download the whole map" saves 2 × 2 or
@@ -139,8 +140,9 @@ Design notes:
   differently by each slicer. So the 3MF holds the same closed shells as the STL, as one object,
   and each triangle carries its filament the way the slicers store their own multi-material painting
   (`paint_color` for Bambu Studio and OrcaSlicer, `slic3rpe:mmu_segmentation` for PrusaSlicer, one
-  code for both). The ground's top triangles take the water's colour where two of their three corners
-  are water; buried undersides stay unpainted. Level roads are cut into the ground's top as sunken
+  code for both). Triangles record which part they belong to, and each part's filament is applied
+  only when the file is written. The ground's top triangles are water where two of their three
+  corners are, else parks and woods where two are; buried undersides stay unpainted. Level roads are cut into the ground's top as sunken
   roads are, at no depth: their edges split the triangles, so the paint follows the road exactly. Sliced in PrusaSlicer 2.7 as a four-filament printer,
   every point of a test town well inside one colour came out on top in that filament.
 - **Renders on demand.** Frames are drawn only while the camera moves or something changes.
