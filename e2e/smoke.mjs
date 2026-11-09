@@ -698,6 +698,8 @@ try {
   // the whole map at once: 2 × 2 squares, built one after another into one ZIP
   if (!(await bm.isVisible('#share-dialog'))) await bm.click('#share-btn');
   await bm.click('#series-block [data-value="2"]');
+  await bm.locator('#series-all-btn').scrollIntoViewIfNeeded();
+  await shot(bm, '12c-bigger-map-panel');
   const [mapDl] = await Promise.all([bm.waitForEvent('download', { timeout: 300000 }), bm.click('#series-all-btn')]);
   const mapPath = join(out, '12c-map-2x2.zip');
   await mapDl.saveAs(mapPath);
